@@ -47,7 +47,6 @@ jobs:
                       android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.HOME"/>
                           <category android:name="android.intent.category.DEFAULT"/>
                           <category android:name="android.intent.category.LAUNCHER"/>
                       </intent-filter>
@@ -71,9 +70,15 @@ jobs:
           #top{position:absolute;left:0;right:0;top:0;height:24px;line-height:24px;background:#000;color:#ccc;font-size:13px;padding:0 10px;overflow:hidden}
           #clk{float:left}#bt{float:right}#wfi{display:block;text-align:center;color:#8ab}
           #bi{display:inline-block;width:24px;height:11px;border:1px solid #ccc;border-radius:2px;margin-left:6px;vertical-align:-1px;padding:1px}#bf{display:block;height:100%;width:50%;background:#4c4}
-          .r{height:44px;line-height:44px;padding:0 12px;font-size:19px;overflow:hidden;white-space:nowrap}
+          .r{height:44px;line-height:44px;padding:0 12px;font-size:19px;overflow:hidden;white-space:nowrap;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center}
           .r.sel{background:linear-gradient(#5a9bff,#1f5bd6);color:#fff}
-          .s{float:right;font-size:14px;color:#9ab;max-width:45%;overflow:hidden}
+          .t{-webkit-flex:1 1 0;flex:1 1 0;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+          .s{-webkit-flex:0 1 auto;flex:0 1 auto;max-width:38%;margin-left:8px;font-size:14px;color:#9ab;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+          .sel .t,.sel .s{text-overflow:clip}
+          .dl{-webkit-flex:0 0 auto;flex:0 0 auto;margin-left:8px;width:30px;height:26px;line-height:26px;text-align:center;border-radius:6px;background:#2f6fe4;color:#fff;font-size:16px;font-weight:bold}
+          .dl.ok{background:#2a9d4a}.sel .dl{background:#fff;color:#1f5bd6}
+          #dlb{position:absolute;right:6px;top:4px;height:22px;line-height:22px;padding:0 8px;border-radius:5px;background:#2f6fe4;color:#fff;font-size:12px;display:none}
+          #title{display:inline-block;max-width:58%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;vertical-align:top}
           .sel .s{color:#dde}
           #np{display:none;padding:10px}
           #art{float:left;width:112px;height:112px;background:#222 center/cover;margin-right:10px;border-radius:6px;text-align:center;line-height:112px;font-size:50px;color:#555}
@@ -94,7 +99,7 @@ jobs:
           <div id="top"><span id="clk"></span><span id="bt"><span id="pc"></span><span id="bi"><i id="bf"></i></span></span><span id="wfi"></span></div>
           <div id="ipod">
           <div id="scr">
-            <div id="bar"><span id="title">iPod</span></div>
+            <div id="bar"><span id="title">iPod</span><span id="dlb">&#8595; Download</span></div>
             <div id="list"></div>
             <div id="np"><div id="art">&#9835;</div><div id="nt"></div><div id="na"></div><div id="nb"></div>
               <div id="pb"><i id="pf"></i></div><div id="tm"><span id="tl">0:00</span><span id="tr">-0:00</span></div><div id="vb"><i id="vf"></i></div><div id="md"></div></div>
@@ -108,7 +113,7 @@ jobs:
           <script>
           // ES5 only (old WebView on Android 5.1). Avoid names that clash with window.* (top, scroll, ...)
           var $=function(i){return document.getElementById(i)};
-          var S=[],lib=[],pls={},Q=[],cur=-1,st={p:0,d:0,pl:false,i:-1},ROWS=7,H=null,cbs={},cid=0,dls={},did=0,ttm=null,qmode='aud',npm='vol',shuf=false,rep=0,idle=null,dimmed=false;
+          var S=[],lib=[],pls={},Q=[],cur=-1,st={p:0,d:0,pl:false,i:-1},ROWS=7,H=null,cbs={},cid=0,dls={},did=0,ttm=null,lastErr='',dlDone={},scanMsg=0,LONGPRESS=false,SYS=false,MQ=[],qmode='aud',npm='vol',shuf=false,rep=0,idle=null,dimmed=false;
           try{var o=JSON.parse(localStorage.getItem('opt')||'{}');shuf=!!o.s;rep=o.r||0}catch(e){}
           function optSave(){try{localStorage.setItem('opt',JSON.stringify({s:shuf,r:rep}))}catch(e){}}
           function refresh(f){var k=cs().sel;S.pop();push(f());cs().sel=k;draw()}
@@ -120,36 +125,36 @@ jobs:
           function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(ttm);ttm=setTimeout(function(){t.style.display='none'},2400)}
           function cs(){return S[S.length-1]}
           function push(sc){sc.sel=0;sc.off=0;S.push(sc);draw()}
-          function back(){if($('qb').style.display=='block'){$('qb').style.display='none';$('qi').blur();return}if(S.length>1){S.pop();draw()}}
+          function back(){if($('qb').style.display=='block'){$('qb').style.display='none';$('qi').blur();return false}if(S.length>1){S.pop();draw();return false}return true}
 
           // ---- drawing ----
-          function draw(){var s=cs();$('title').textContent=s.title;
+          function draw(){var s=cs();$('title').textContent=s.title;mqReset();dlBar();
            if(s.np){$('list').style.display='none';$('np').style.display='block';drawNP();return}
            $('np').style.display='none';$('list').style.display='block';
            var n=s.items.length,h='',i;
            if(s.sel<s.off)s.off=s.sel;if(s.sel>=s.off+ROWS)s.off=s.sel-ROWS+1;
            for(i=s.off;i<Math.min(n,s.off+ROWS);i++){var it=s.items[i];
-            h+='<div class="r'+(i==s.sel?' sel':'')+'" data-i="'+i+'">'+(it.s!=null&&it.s!==''?'<span class="s">'+esc(it.s)+'</span>':'')+esc(it.t)+'</div>'}
+            h+='<div class="r'+(i==s.sel?' sel':'')+'" data-i="'+i+'"><span class="t">'+esc(it.t)+'</span>'+(it.s!=null&&it.s!==''?'<span class="s">'+esc(it.s)+'</span>':'')+(it.tr&&isNet(it.tr)?'<span class="dl'+(dlDone[it.tr.p]?' ok':'')+'" data-d="'+i+'">'+(dlDone[it.tr.p]?'&#10003;':'&#8595;')+'</span>':'')+'</div>'}
            if(!n)h='<div class="r">'+esc(s.empty||'Empty')+'</div>';
-           $('list').innerHTML=h}
-          function drawNP(){var t=Q[cur],im='';
+           $('list').innerHTML=h;var se=$('list').querySelector('.sel');if(se){mqAdd(se.querySelector('.t'));mqAdd(se.querySelector('.s'))}}
+          function drawNP(){var t=Q[cur],im='';mqReset();dlBar();
            if(!t){$('nt').textContent='Not Playing';$('na').textContent='';$('nb').textContent='';$('art').style.backgroundImage='none';$('art').innerHTML='&#9835;';return}
            $('nt').textContent=t.t;$('na').textContent=t.a;$('nb').textContent=t.b;
            if(t.img)im=t.img;else{try{im=A.art(t.p)}catch(e){}}
-           $('art').style.backgroundImage=im?'url('+im+')':'none';$('art').innerHTML=im?'':'&#9835;'}
+           $('art').style.backgroundImage=im?'url('+im+')':'none';$('art').innerHTML=im?'':'&#9835;';mqAdd($('nt'));mqAdd($('na'));mqAdd($('nb'))}
 
           // ---- navigation ----
           function mv(d){var s=cs();
            if(s.np){if(npm=='vol'){A.vol(d);poll()}else{st.p=Math.max(0,st.p+d*5000);A.seek(st.p)}return}
            var n=s.items.length;if(!n)return;s.sel=Math.max(0,Math.min(n-1,s.sel+d));draw()}
           function sel(){var s=cs();if(s.np){npm=npm=='vol'?'seek':'vol';poll();return}var it=s.items[s.sel];if(it&&it.f)it.f(it)}
-          function ctx(){var s=cs();var it=s.items[s.sel];if(it&&s.ctx)s.ctx(it)}
+          function ctx(){if(!LONGPRESS)return;var s=cs();var it=s.items[s.sel];if(it&&s.ctx)s.ctx(it)}
           // tap / swipe directly on the screen list
           var ly=0,lmoved=0,lacc=0;
           $('list').addEventListener('touchstart',function(e){ly=e.touches[0].clientY;lmoved=0;lacc=0},false);
           $('list').addEventListener('touchmove',function(e){var y=e.touches[0].clientY;lacc+=ly-y;ly=y;lmoved+=Math.abs(lacc);
            while(lacc>=40){lacc-=40;mv(1)}while(lacc<=-40){lacc+=40;mv(-1)}e.preventDefault()},false);
-          $('list').addEventListener('click',function(e){if(lmoved>25)return;var n=e.target;
+          $('list').addEventListener('click',function(e){if(lmoved>25)return;var n=e.target;if(n&&n.getAttribute&&n.getAttribute('data-d')!=null){var dit=cs().items[parseInt(n.getAttribute('data-d'),10)];if(dit&&dit.tr)dl(dit.tr);return}
            while(n&&n!==this&&!n.getAttribute('data-i'))n=n.parentNode;
            if(n&&n.getAttribute&&n.getAttribute('data-i')!=null){cs().sel=parseInt(n.getAttribute('data-i'),10);draw();sel()}},false);
           $('np').addEventListener('click',function(){A.toggle()},false);
@@ -167,8 +172,9 @@ jobs:
            {t:'Artists',s:'>',f:artists},
            {t:'Shuffle All',f:function(){var l=lib.slice().sort(function(){return Math.random()-.5});if(l.length)play(l,0)}},
            {t:'Shuffle',s:shuf?'On':'Off',f:function(){shuf=!shuf;A.setShuffle(shuf);optSave();refresh(musicMenu)}},
-           {t:'Repeat',s:['Off','All','One'][rep],f:function(){rep=(rep+1)%3;A.setRepeat(rep);optSave();refresh(musicMenu)}}]}}
-          function songs(list,title,addable,plname){return{title:title,empty:'No songs - copy MP3s or use Online',items:list.map(function(t,i){return{t:t.t,s:t.a,f:function(){play(list,i)},tr:t}}),
+           {t:'Repeat',s:['Off','All','One'][rep],f:function(){rep=(rep+1)%3;A.setRepeat(rep);optSave();refresh(musicMenu)}},
+           {t:'Source',s:'Phone files'}]}}
+          function songs(list,title,addable,plname){return{title:title,empty:'No songs - try Settings > Rescan',items:list.map(function(t,i){return{t:t.t,s:t.a,f:function(){play(list,i)},tr:t}}),
            ctx:function(it){if(plname){var k=pls[plname].indexOf(it.tr.p);if(k>=0){pls[plname].splice(k,1);savePl();toast('Removed');S.pop();push(songs(plTracks(plname),title,false,plname))}}
             else if(addable)push(actMenu(it.tr))}}}
           function actMenu(tr){var it=[{t:'Add to playlist',f:function(){push(addMenu(tr))}}];
@@ -183,42 +189,57 @@ jobs:
           function addMenu(tr){var items=Object.keys(pls).map(function(n){return{t:n,f:function(){if(pls[n].indexOf(tr.p)<0)pls[n].push(tr.p);savePl();toast('Added to '+n);S.pop();S.pop();draw()}}});
            return{title:'Add to...',empty:'Create a playlist first',items:items,sel:0,off:0}}
           function askQ(mode,ph){qmode=mode;$('qi').placeholder=ph;$('qb').style.display='block';$('qi').value='';$('qi').focus()}
-          function onlineMenu(){return{title:'Online',items:[
+          function onlineMenu(){var it=[
            {t:'Search Music',s:'Audius',f:function(){askQ('aud','Song or artist...')}},
            {t:'Search Podcasts',f:function(){askQ('pod','Podcast name...')}},
-           {t:'Wi-Fi On/Off',f:function(){A.toggleWifi();toast('Toggling Wi-Fi...');setTimeout(upd,2500)}},
-           {t:'Wi-Fi Settings',f:function(){A.openWifi()}}]}}
-          function setMenu(){return{title:'Settings',items:[
+           {t:'Wi-Fi On/Off',f:function(){A.toggleWifi();toast('Toggling Wi-Fi...');setTimeout(upd,2500)}}];
+           if(SYS)it.push({t:'Wi-Fi Settings',f:function(){A.openWifi()}});
+           return{title:'Online',items:it}}
+          function setMenu(){var it=[
            {t:'Wi-Fi On/Off',f:function(){A.toggleWifi();setTimeout(upd,2500)}},
-           {t:'Wi-Fi Settings',f:function(){A.openWifi()}},
-           {t:'Rescan Library',f:function(){loadLib();toast(lib.length+' songs')}},
-           {t:'Android Settings',f:function(){A.openSettings()}}]}}
+           {t:'Rescan Library',f:function(){scanMsg=1;toast('Scanning...');A.rescan()}}];
+           if(SYS){it.push({t:'Wi-Fi Settings',f:function(){A.openWifi()}});it.push({t:'Android Settings',f:function(){A.openSettings()}})}
+           return{title:'Settings',items:it}}
 
           // ---- playback ----
           function play(list,i){Q=list.slice();cur=i;A.playQueue(JSON.stringify(Q.map(function(t){return t.p})),i);
            if(!cs().np)push({title:'Now Playing',np:1});else drawNP()}
-          function poll(){var s;try{s=JSON.parse(A.state())}catch(e){return}st=s;
+          function poll(){var s;try{s=JSON.parse(A.state())}catch(e){return}st=s;if(s.e&&s.e!=lastErr)toast(s.e);lastErr=s.e||'';
            if(s.i>=0&&s.i!=cur&&Q[s.i]){cur=s.i;if(cs().np)drawNP()}
            if(cs().np){var d=s.d||(Q[cur]?Q[cur].d*1000:0);
             $('pf').style.width=(d?Math.min(100,s.p*100/d):0)+'%';$('tl').textContent=fmt(s.p/1000);$('tr').textContent='-'+fmt((d-s.p)/1000);
             try{var v=A.volume().split(',');$('vf').style.width=(v[0]*100/v[1])+'%'}catch(e){}
-            $('md').textContent=(npm=='vol'?'Wheel: Volume (center = scrub)':'Wheel: Scrub (center = volume)')+(s.s?' | Shuffle':'')+(s.r==1?' | Repeat all':s.r==2?' | Repeat one':'')}}
+            $('md').textContent=(s.l?'Loading... | ':'')+(npm=='vol'?'Wheel: Volume (center = scrub)':'Wheel: Scrub (center = volume)')+(s.s?' | Shuffle':'')+(s.r==1?' | Repeat all':s.r==2?' | Repeat one':'')}}
 
           // ---- online: Audius music + podcasts ----
           function get(u,f){cbs[++cid]=f;A.get(u,cid)}
           function onHttp(id,ok,b){var f=cbs[id];delete cbs[id];if(f)f(ok?b:null)}
           function onDl(id,p,path){var t=dls[id];if(!t)return;
            if(p==-1){toast('Download failed');delete dls[id]}
-           else if(p==101){lib.push(clean({p:path,t:t.t,a:t.a,b:'Downloads',d:t.d}));toast('Saved: '+t.t);delete dls[id]}
+           else if(p==101){dlDone[t.p]=1;lib.push(clean({p:path,t:t.t,a:t.a,b:'Downloads',d:t.d}));toast('Saved to Music/iPod');delete dls[id];draw()}
            else toast('Downloading '+p+'%')}
-          function trackScreen(T,title){return{title:title,empty:'No results',items:T.map(function(t,i){return{t:t.t,s:t.a,f:function(){play(T,i)},tr:t}}),
-           ctx:function(it){var id=++did;dls[id]=it.tr;toast('Downloading...');A.download(it.tr.p,it.tr.t+' - '+it.tr.a,id)}}}
+          function isNet(t){return /^https?:/i.test(t.p||'')}
+          function dl(t){if(!isNet(t))return;if(dlDone[t.p]){toast('Already downloaded');return}
+           for(var k in dls)if(dls[k]===t){toast('Already downloading...');return}
+           var id=++did;dls[id]=t;toast('Downloading...');A.download(t.p,t.t+' - '+t.a,id)}
+          function dlBar(){var t=Q[cur],s=cs(),b=$('dlb');if(!b)return;
+           b.style.display=(s&&s.np&&t&&isNet(t))?'block':'none';b.innerHTML=(t&&dlDone[t.p])?'&#10003; Saved':'&#8595; Download'}
+          $('dlb').addEventListener('click',function(e){e.stopPropagation();var t=Q[cur];if(t)dl(t)},false);
+          function onScan(){loadLib();if(scanMsg){toast(lib.length+' songs found');scanMsg=0}}
+          // ---- marquee: long text scrolls sideways instead of overlapping ----
+          function mqReset(){for(var i=0;i<MQ.length;i++)MQ[i].e.scrollLeft=0;MQ=[]}
+          function mqAdd(e){if(e)MQ.push({e:e,t:0,w:16})}
+          setInterval(function(){for(var i=0;i<MQ.length;i++){var m=MQ[i],e=m.e,max=e.scrollWidth-e.clientWidth;if(max<=2)continue;
+           if(m.w>0){m.w--;continue}
+           if(m.t>=max){m.t=0;e.scrollLeft=0;m.w=16;continue}
+           m.t=Math.min(max,m.t+2);e.scrollLeft=m.t;if(m.t>=max)m.w=16}},60);
+          function trackScreen(T,title){return{title:title,empty:'No results',items:T.map(function(t,i){return{t:t.t,s:t.a,f:function(){play(T,i)},tr:t}})}}
           function host(f){if(H)return f(H);get('https://api.audius.co',function(r){try{H=JSON.parse(r).data[0]}catch(e){H='https://discoveryprovider.audius.co'}f(H)})}
           function audSearch(q){toast('Searching...');host(function(h){
            get(h+'/v1/tracks/search?query='+encodeURIComponent(q)+'&limit=25&app_name=IPODCLASSIC',function(r){
             var d;try{d=JSON.parse(r).data}catch(e){}if(!d){toast('Search failed - check Wi-Fi');return}
             var T=d.map(function(x){return{p:h+'/v1/tracks/'+x.id+'/stream?app_name=IPODCLASSIC',t:x.title,a:x.user?x.user.name:'',b:'Audius',d:x.duration||0,img:x.artwork?x.artwork['150x150']:''}});
-            push(trackScreen(T,'Results'));toast('Tap = play, hold center = download')})})}
+            push(trackScreen(T,'Results'));toast('Tap = play, \u2193 = download')})})}
           function podSearch(q){toast('Searching...');
            get('https://itunes.apple.com/search?media=podcast&limit=20&term='+encodeURIComponent(q),function(r){
             var d;try{d=JSON.parse(r).results}catch(e){}if(!d||!d.length){toast('No results - check Wi-Fi');return}
@@ -227,7 +248,7 @@ jobs:
            var parts=r.split('<item'),T=[],i;
            for(i=1;i<parts.length&&T.length<30;i++){var p=parts[i],u=/<enclosure[^>]*url=["']([^"']+)["']/.exec(p),t=/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/.exec(p);
             if(u)T.push({p:u[1].replace(/&amp;/g,'&'),t:t?t[1].trim():'Episode',a:x.collectionName,b:'Podcast',d:0,img:x.artworkUrl100})}
-           if(!T.length){toast('No episodes');return}push(trackScreen(T,'Episodes'));toast('Tap = play, hold center = download')})}
+           if(!T.length){toast('No episodes');return}push(trackScreen(T,'Episodes'));toast('Tap = play, \u2193 = download')})}
           $('qi').onkeydown=function(e){if(e.keyCode==13){var q=this.value;this.blur();$('qb').style.display='none';if(q){if(qmode=='pod')podSearch(q);else audSearch(q)}}};
 
           // ---- click wheel ----
@@ -236,7 +257,7 @@ jobs:
            x=t.clientX-(r.left+r.width/2),y=t.clientY-(r.top+r.height/2);
            return{d:Math.sqrt(x*x+y*y),a:Math.atan2(y,x)*180/Math.PI,R:r.width/2}}
           W.addEventListener('touchstart',function(e){e.preventDefault();var p=pt(e);zone=p.d<p.R*0.38;ang=p.a;acc=0;moved=0;lng=0;
-           if(zone)tid=setTimeout(function(){lng=1;ctx()},600)},false);
+           if(zone&&LONGPRESS)tid=setTimeout(function(){lng=1;ctx()},600)},false);
           W.addEventListener('touchmove',function(e){e.preventDefault();if(zone)return;var p=pt(e),d=p.a-ang;
            if(d>180)d-=360;if(d<-180)d+=360;ang=p.a;acc+=d;moved+=Math.abs(d);
            var step=cs().np?14:24;
@@ -258,7 +279,7 @@ jobs:
            ROWS=Math.max(3,Math.floor(($('scr').offsetHeight-8-30)/44));if(S.length)draw()}
           window.onresize=layout;
           try{layout();loadLib();push(mainMenu());upd()}catch(e){document.body.innerHTML='<pre style="color:#f66;padding:10px">ERR: '+e+'</pre>'}
-          document.addEventListener('touchstart',wake,true);wake();A.setShuffle(shuf);A.setRepeat(rep);
+          document.addEventListener('touchstart',wake,true);wake();A.setShuffle(shuf);A.setRepeat(rep);setTimeout(function(){A.rescan()},3000);
           setInterval(poll,500);setInterval(upd,15000);
           </script></body></html>
           EOF_X
@@ -310,6 +331,7 @@ jobs:
                       if (c != null) {
                           while (c.moveToNext()) {
                               String p = c.getString(0); if (p == null) continue;
+                                        File ff = new File(p); if (!ff.exists() || ff.length() == 0) continue;   // skip stale MediaStore entries
                               String l = p.toLowerCase();
                               if (!(l.endsWith(".mp3") || l.endsWith(".m4a") || l.endsWith(".wav") || l.endsWith(".aac") || l.endsWith(".ogg") || l.endsWith(".flac"))) continue;
                               if (l.contains("/ringtones/") || l.contains("/notifications/") || l.contains("/alarms/")) continue;
@@ -440,25 +462,76 @@ jobs:
                   }).start();
               }
 
+              /** Web stream -> cache file (uses the relaxed-SSL helper, so old Android can play HTTPS streams). */
+              static File cacheStream(Context c, String url) throws IOException {
+                  File dir = new File(c.getCacheDir(), "stream"); dir.mkdirs();
+                  File f = new File(dir, Integer.toHexString(url.hashCode()) + ".mp3");
+                  if (f.exists() && f.length() > 0) { f.setLastModified(System.currentTimeMillis()); return f; }
+                  File tmp = new File(dir, f.getName() + "." + System.nanoTime() + ".part");
+                  HttpURLConnection h = httpOpen(url);
+                  if (h.getResponseCode() >= 400) throw new IOException("HTTP " + h.getResponseCode());
+                  InputStream in = h.getInputStream(); FileOutputStream o = new FileOutputStream(tmp);
+                  try { byte[] b = new byte[16384]; int n; while ((n = in.read(b)) > 0) o.write(b, 0, n); }
+                  finally { try { o.close(); } catch (Exception e) {} try { in.close(); } catch (Exception e) {} }
+                  if (tmp.length() == 0 || !tmp.renameTo(f)) { tmp.delete(); throw new IOException("empty"); }
+                  File[] fs = dir.listFiles();
+                  if (fs != null && fs.length > 12) {
+                      java.util.Arrays.sort(fs, (x, y) -> Long.compare(x.lastModified(), y.lastModified()));
+                      for (int i = 0; i < fs.length - 12; i++) if (!fs[i].equals(f)) fs[i].delete();
+                  }
+                  return f;
+              }
+
+              /** Re-index audio files on the phone so the Music list is up to date. */
+              @JavascriptInterface public void rescan() {
+                  new Thread(() -> {
+                      final java.util.List<String> L = new java.util.ArrayList<>();
+                      walk(Environment.getExternalStorageDirectory(), 0, L);
+                      if (L.isEmpty()) { js("onScan()"); return; }
+                      final java.util.concurrent.atomic.AtomicInteger left = new java.util.concurrent.atomic.AtomicInteger(L.size());
+                      MediaScannerConnection.scanFile(a, L.toArray(new String[0]), null, (p, u) -> { if (left.decrementAndGet() == 0) js("onScan()"); });
+                  }).start();
+              }
+              static void walk(File d, int depth, java.util.List<String> out) {
+                  File[] fs = d == null ? null : d.listFiles();
+                  if (fs == null || depth > 6 || out.size() > 3000) return;
+                  for (File f : fs) {
+                      String n = f.getName(), l = n.toLowerCase();
+                      if (n.startsWith(".")) continue;
+                      if (f.isDirectory()) { if (!n.equals("Android") && !l.equals("ringtones") && !l.equals("notifications") && !l.equals("alarms")) walk(f, depth + 1, out); }
+                      else if (l.endsWith(".mp3") || l.endsWith(".m4a") || l.endsWith(".wav") || l.endsWith(".aac") || l.endsWith(".ogg") || l.endsWith(".flac")) out.add(f.getPath());
+                  }
+              }
+
               @JavascriptInterface public void download(final String url, final String name, final int id) {
                   new Thread(() -> {
+                      File tmp = null;
                       try {
                           File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "iPod");
                           dir.mkdirs();
-                          File f = new File(dir, name.replaceAll("[^\\w\\- ]", "_").substring(0, Math.min(80, name.length())) + ".mp3");
+                          String base = name.replaceAll("[^\\p{L}\\p{N}\\- ]", "_");
+                          base = base.substring(0, Math.min(80, base.length()));
+                          File f = new File(dir, base + ".mp3");
+                          if (f.exists() && f.length() > 0) {
+                              MediaScannerConnection.scanFile(a, new String[]{f.getPath()}, null, null);
+                              js("onDl(" + id + ",101," + JSONObject.quote(f.getPath()) + ")"); return;
+                          }
+                          tmp = new File(dir, base + ".part");
                           HttpURLConnection h = httpOpen(url);
+                          if (h.getResponseCode() >= 400) throw new IOException("HTTP " + h.getResponseCode());
                           int len = h.getContentLength();
-                          InputStream in = h.getInputStream(); FileOutputStream o = new FileOutputStream(f);
+                          InputStream in = h.getInputStream(); FileOutputStream o = new FileOutputStream(tmp);
                           byte[] b = new byte[16384]; int n, last = -1; long t = 0;
                           while ((n = in.read(b)) > 0) {
                               o.write(b, 0, n); t += n;
                               int p = len > 0 ? (int) (t * 100 / len) : 0;
-                              if (p != last && p % 10 == 0) { last = p; js("onDl(" + id + "," + p + ",'')"); }
+                              if (p != last && p % 10 == 0 && p < 100) { last = p; js("onDl(" + id + "," + p + ",'')"); }
                           }
                           o.close(); in.close();
+                          if (t == 0 || !tmp.renameTo(f)) throw new IOException("empty");
                           MediaScannerConnection.scanFile(a, new String[]{f.getPath()}, null, null);
                           js("onDl(" + id + ",101," + JSONObject.quote(f.getPath()) + ")");
-                      } catch (Exception e) { js("onDl(" + id + ",-1,'')"); }
+                      } catch (Exception e) { if (tmp != null) tmp.delete(); js("onDl(" + id + ",-1,'')"); }
                   }).start();
               }
           }
@@ -544,7 +617,7 @@ jobs:
               }
 
               @Override protected void onPause() { super.onPause(); w.onPause(); }   // JS timers stop = saves battery
-              @Override public void onBackPressed() { w.evaluateJavascript("back()", null); } // never exit launcher
+              @Override public void onBackPressed() { w.evaluateJavascript("back()", v -> { if ("true".equals(v)) moveTaskToBack(true); }); } // at root: go to background, music keeps playing
           }
           EOF_X
           mkdir -p 'app/src/main/java/com/ipod/classic'
@@ -552,20 +625,27 @@ jobs:
           package com.ipod.classic;
 
           import android.content.Context;
+          import android.media.AudioAttributes;
           import android.media.AudioManager;
           import android.media.MediaPlayer;
           import android.os.PowerManager;
           import org.json.JSONArray;
+          import org.json.JSONObject;
+          import java.io.File;
+          import java.io.FileInputStream;
           import java.util.ArrayList;
           import java.util.List;
 
-          /** Native playback: keeps playing (and auto-advancing) with the screen off. */
+          /** Native playback: keeps playing (and auto-advancing) with the screen off.
+           *  Local files play directly. Web streams are first fetched to the cache (old Android often
+           *  cannot verify new HTTPS certificates inside MediaPlayer, which was the cause of silence). */
           public class Player {
               static MediaPlayer mp;
               static Context app;
               static final List<String> q = new ArrayList<>();
-              static int idx = -1, repeat = 0;           // repeat: 0 off, 1 all, 2 one
-              static boolean ready = false, shuffle = false, focusPaused = false;
+              static int idx = -1, repeat = 0, gen = 0;           // repeat: 0 off, 1 all, 2 one
+              static boolean ready = false, shuffle = false, focusPaused = false, loading = false;
+              static String err = "";
 
               static final AudioManager.OnAudioFocusChangeListener FL = c -> {
                   synchronized (Player.class) {
@@ -586,57 +666,99 @@ jobs:
                   play(start);
               }
 
-              static synchronized void play(int i) {
+              static synchronized void play(final int i) {
                   if (i < 0 || i >= q.size()) return;
-                  idx = i; ready = false;
+                  idx = i; ready = false; err = "";
+                  final int g = ++gen;
+                  final String src = q.get(i);
+                  try { if (mp != null) mp.reset(); } catch (Exception e) {}
+                  KeepAliveService.start(app);
+                  if (src.startsWith("http")) {
+                      loading = true;
+                      new Thread(() -> {
+                          try { File f = Bridge.cacheStream(app, src); start(f.getPath(), g); }
+                          catch (Exception e) { fail(g, "Cannot load this track"); }
+                      }).start();
+                  } else { start(src, g); }
+              }
+
+              static synchronized void start(String path, int g) {
+                  if (g != gen) return;                      // user already moved to another track
+                  loading = false;
                   try {
+                      File f = new File(path);
+                      if (!f.exists() || f.length() == 0) { fail(g, "File missing or empty"); return; }
+                      AudioManager am = (AudioManager) app.getSystemService(Context.AUDIO_SERVICE);
+                      am.requestAudioFocus(FL, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
+                      ensureVolume(am);
                       if (mp == null) {
                           mp = new MediaPlayer();
-                          mp.setWakeMode(app, PowerManager.PARTIAL_WAKE_LOCK);
-                          mp.setAudioStreamType(AudioManager.STREAM_MUSIC);
-                          mp.setOnPreparedListener(m -> { ready = true; m.start(); });
+                          mp.setOnPreparedListener(m -> { synchronized (Player.class) { ready = true; } m.start(); });
                           mp.setOnCompletionListener(m -> done());
-                          mp.setOnErrorListener((m, what, extra) -> { ready = false; m.reset(); if (idx + 1 < q.size()) play(idx + 1); return true; });
+                          mp.setOnErrorListener((m, what, extra) -> { fail(gen, "Playback error " + what + "/" + extra); return true; });
                       }
-                      ((AudioManager) app.getSystemService(Context.AUDIO_SERVICE)).requestAudioFocus(FL, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
                       mp.reset();
+                      mp.setAudioAttributes(new AudioAttributes.Builder()
+                          .setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build());
+                      mp.setWakeMode(app, PowerManager.PARTIAL_WAKE_LOCK);
                       mp.setVolume(1f, 1f);
-                      mp.setDataSource(q.get(i));
+                      FileInputStream in = new FileInputStream(f);
+                      try { mp.setDataSource(in.getFD()); } finally { in.close(); }
                       mp.prepareAsync();
-                      KeepAliveService.start(app);
-                  } catch (Exception e) { ready = false; }
+                  } catch (Exception e) { fail(g, "Cannot play: " + e.getClass().getSimpleName()); }
+              }
+
+              /** Make sure the media volume is not muted / near zero when a song starts. */
+              static void ensureVolume(AudioManager am) {
+                  try {
+                      int max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC), v = am.getStreamVolume(AudioManager.STREAM_MUSIC);
+                      if (v < max / 3) am.setStreamVolume(AudioManager.STREAM_MUSIC, Math.max(1, max * 6 / 10), 0);
+                  } catch (Exception e) {}
+              }
+
+              static synchronized void fail(int g, String msg) {
+                  if (g != gen) return;
+                  loading = false; ready = false; err = msg;
+                  try { if (mp != null) mp.reset(); } catch (Exception e) {}
               }
 
               static synchronized void done() { if (repeat == 2) play(idx); else next(); }
 
               static synchronized void next() {
+                  if (q.isEmpty()) return;
                   int n = idx + 1;
                   if (shuffle && q.size() > 1) { do { n = (int) (Math.random() * q.size()); } while (n == idx); }
                   if (n < q.size()) play(n);
-                  else if (repeat == 1 && q.size() > 0) play(0);
-                  else { try { mp.reset(); } catch (Exception e) {} ready = false; KeepAliveService.stop(app); }
+                  else if (repeat == 1) play(0);
+                  else { gen++; try { if (mp != null) mp.reset(); } catch (Exception e) {} ready = false; loading = false; KeepAliveService.stop(app); }
               }
 
               static synchronized void prev() {
-                  if (ready && mp.getCurrentPosition() > 3000) mp.seekTo(0);
-                  else if (idx > 0) play(idx - 1);
+                  try {
+                      if (ready && mp.getCurrentPosition() > 3000) mp.seekTo(0);
+                      else if (idx > 0) play(idx - 1);
+                  } catch (Exception e) {}
               }
 
               static synchronized void toggle() {
-                  if (mp == null || !ready) return;
-                  if (mp.isPlaying()) mp.pause(); else mp.start();
+                  try {
+                      if (loading) return;
+                      if (!ready) { if (idx >= 0) play(idx); return; }   // retry after an error / end of queue
+                      if (mp.isPlaying()) mp.pause(); else mp.start();
+                  } catch (Exception e) {}
               }
 
               static synchronized void pause() { try { if (mp != null && ready && mp.isPlaying()) mp.pause(); } catch (Exception e) {} }
 
               static synchronized void seek(int ms) {
-                  if (ready) mp.seekTo(Math.max(0, Math.min(ms, mp.getDuration())));
+                  try { if (ready) mp.seekTo(Math.max(0, Math.min(ms, mp.getDuration()))); } catch (Exception e) {}
               }
 
               static synchronized String state() {
                   int p = 0, d = 0; boolean pl = false;
                   if (mp != null && ready) { try { p = mp.getCurrentPosition(); d = mp.getDuration(); pl = mp.isPlaying(); } catch (Exception e) {} }
-                  return "{\"i\":" + idx + ",\"p\":" + p + ",\"d\":" + d + ",\"pl\":" + pl + ",\"r\":" + repeat + ",\"s\":" + shuffle + "}";
+                  return "{\"i\":" + idx + ",\"p\":" + p + ",\"d\":" + d + ",\"pl\":" + pl + ",\"r\":" + repeat + ",\"s\":" + shuffle
+                      + ",\"l\":" + loading + ",\"e\":" + JSONObject.quote(err) + "}";
               }
           }
           EOF_X
