@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>iPod</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none}
+html,body{width:100%;height:100%;background:#000;color:#eee;font-family:sans-serif;overflow:hidden}
+#scr{position:absolute;left:3%;top:2%;width:94%;height:46%;background:#000;border:2px solid #333;border-radius:8px;overflow:hidden}
+#bar{height:30px;line-height:30px;background:#1c1c1c;position:relative;text-align:center;font-weight:bold;font-size:16px}
+#wf{position:absolute;left:8px;top:0;font-size:12px;color:#8ab;font-weight:normal}
+#bat{position:absolute;right:8px;top:0;font-size:13px;font-weight:normal}
+.r{height:44px;line-height:44px;padding:0 12px;font-size:19px;overflow:hidden;white-space:nowrap}
+.r.sel{background:#2f6fe4;color:#fff}
+.s{float:right;font-size:14px;color:#9ab;max-width:45%;overflow:hidden}
+.sel .s{color:#dde}
+#np{display:none;padding:8px 10px}
+#art{float:left;width:110px;height:110px;background:#222 center/cover;margin-right:10px;text-align:center;line-height:110px;font-size:50px;color:#555}
+#nt{font-size:20px;font-weight:bold;overflow:hidden;white-space:nowrap;margin-top:6px}
+#na,#nb{font-size:15px;color:#9ab;overflow:hidden;white-space:nowrap;margin-top:4px}
+#pb{clear:both;height:8px;background:#333;border-radius:4px;margin-top:16px;overflow:hidden}
+#pf{display:block;height:100%;width:0;background:#2f6fe4}
+#tm{font-size:13px;color:#9ab;margin-top:4px;overflow:hidden}
+#tr{float:right}
+#toast{position:absolute;left:10%;right:10%;bottom:8px;background:#2f6fe4;color:#fff;text-align:center;padding:6px;border-radius:6px;font-size:14px;display:none}
+#qb{position:absolute;left:0;right:0;top:30px;padding:10px;background:#111;display:none;z-index:5}
+#qi{width:100%;font-size:20px;padding:8px;background:#222;color:#fff;border:1px solid #2f6fe4;-webkit-user-select:text}
+#wheel{position:absolute;border-radius:50%;background:#1a1a1a;border:2px solid #333}
+#cb{position:absolute;left:33%;top:33%;width:34%;height:34%;border-radius:50%;background:#0c0c0c;border:2px solid #333}
+.lb{position:absolute;color:#aaa;font-size:15px;font-weight:bold}
+</style></head><body>
+<div id="scr">
+  <div id="bar"><span id="wf"></span><span id="title">iPod</span><span id="bat"></span></div>
+  <div id="list"></div>
+  <div id="np"><div id="art">&#9835;</div><div id="nt"></div><div id="na"></div><div id="nb"></div>
+    <div id="pb"><i id="pf"></i></div><div id="tm"><span id="tl">0:00</span><span id="tr">-0:00</span></div></div>
+  <div id="qb"><input id="qi" type="text" placeholder="Search Audius..."></div>
+  <div id="toast"></div>
+</div>
+<div id="wheel"><div class="lb" style="top:6%;left:0;width:100%;text-align:center">MENU</div>
+  <div class="lb" style="left:7%;top:45%">|&lt;&lt;</div><div class="lb" style="right:7%;top:45%">&gt;&gt;|</div>
+  <div class="lb" style="bottom:6%;left:0;width:100%;text-align:center">&gt;||</div><div id="cb"></div></div>
+<script>
+// ES5 only (old WebView on Android 5.1)
+var $=function(i){return document.getElementById(i)};
+var S=[],lib=[],pls={},Q=[],cur=-1,st={p:0,d:0,pl:false,i:-1},ROWS=7,H=null,cbs={},cid=0,dls={},did=0,ttm=null;
+try{pls=JSON.parse(localStorage.getItem('pl')||'{}')}catch(e){}
+function savePl(){try{localStorage.setItem('pl',JSON.stringify(pls))}catch(e){}}
+function esc(s){return String(s==null?'':s).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
+function fmt(s){s=Math.max(0,Math.floor(s));return Math.floor(s/60)+':'+(s%60<10?'0':'')+s%60}
+function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(ttm);ttm=setTimeout(function(){t.style.display='none'},2200)}
+function top(){return S[S.length-1]}
+function push(sc){sc.sel=0;sc.off=0;S.push(sc);draw()}
+function back(){if($('qb').style.display=='block'){$('qb').style.display='none';$('qi').blur();return}if(S.length>1){S.pop();draw()}}
+
+// ---- drawing ----
+function draw(){var s=top();$('title').textContent=s.title;
+ if(s.np){$('list').style.display='none';$('np').style.display='block';drawNP();return}
+ $('np').style.display='none';$('list').style.display='block';
+ var n=s.items.length,h='',i;
+ if(s.sel<s.off)s.off=s.sel;if(s.sel>=s.off+ROWS)s.off=s.sel-ROWS+1;
+ for(i=s.off;i<Math.min(n,s.off+ROWS);i++){var it=s.items[i];
+  h+='<div class="r'+(i==s.sel?' sel':'')+'">'+(it.s?'<span class="s">'+esc(it.s)+'</span>':'')+esc(it.t)+'</div>'}
+ if(!n)h='<div class="r">'+esc(s.empty||'Empty')+'</div>';
+ $('list').innerHTML=h}
+function drawNP(){var t=Q[cur];
+ if(!t){$('nt').textContent='Not Playing';$('na').textContent='';$('nb').textContent='';$('art').style.backgroundImage='none';return}
+ $('nt').textContent=t.t;$('na').textContent=t.a;$('nb').textContent=t.b;
+ var im='';try{im=A.art(t.p)}catch(e){}
+ $('art').style.backgroundImage=im?'url('+im+')':'none';$('art').innerHTML=im?'':'&#9835;'}
+
+// ---- navigation ----
+function scroll(d){var s=top();
+ if(s.np){st.p=Math.max(0,st.p+d*5000);A.seek(st.p);return}
+ var n=s.items.length;if(!n)return;s.sel=Math.max(0,Math.min(n-1,s.sel+d));draw()}
+function sel(){var s=top();if(s.np){A.toggle();return}var it=s.items[s.sel];if(it&&it.f)it.f(it)}
+function ctx(){var s=top();var it=s.items[s.sel];if(it&&s.ctx)s.ctx(it)}
+
+// ---- screens ----
+function clean(t){t.a=(!t.a||t.a=='<unknown>')?'Unknown':t.a;t.b=(!t.b||t.b=='<unknown>')?'Unknown':t.b;t.t=t.t||'Untitled';return t}
+function mainMenu(){return{title:'iPod',items:[
+ {t:'Now Playing',f:function(){if(cur>=0)push({title:'Now Playing',np:1})}},
+ {t:'Music',s:'>',f:function(){push(musicMenu())}},
+ {t:'Playlists',s:'>',f:function(){push(plMenu())}},
+ {t:'Online',s:'>',f:function(){push(onlineMenu())}},
+ {t:'Settings',s:'>',f:function(){push(setMenu())}}]}}
+function musicMenu(){return{title:'Music',items:[
+ {t:'All Songs',s:lib.length,f:function(){push(songs(lib,'Songs',true))}},
+ {t:'Artists',s:'>',f:artists},
+ {t:'Shuffle All',f:function(){var l=lib.slice().sort(function(){return Math.random()-.5});if(l.length)play(l,0)}}]}}
+function songs(list,title,addable,plname){return{title:title,empty:'No songs',items:list.map(function(t,i){return{t:t.t,s:t.a,f:function(){play(list,i)},tr:t}}),
+ ctx:function(it){if(plname){var k=pls[plname].indexOf(it.tr.p);if(k>=0){pls[plname].splice(k,1);savePl();toast('Removed');S.pop();push(songs(plTracks(plname),title,false,plname))}}
+  else if(addable)push(addMenu(it.tr))}}}
+function artists(){var m={},k;lib.forEach(function(t){(m[t.a]=m[t.a]||[]).push(t)});
+ var names=Object.keys(m).sort();push({title:'Artists',items:names.map(function(n){return{t:n,s:m[n].length,f:function(){push(songs(m[n],n,true))}}})})}
+function plTracks(n){return pls[n].map(function(p){for(var i=0;i<lib.length;i++)if(lib[i].p==p)return lib[i]}).filter(Boolean)}
+function plMenu(){var items=Object.keys(pls).map(function(n){return{t:n,s:pls[n].length,f:function(){push(songs(plTracks(n),n,false,n))}}});
+ items.push({t:'+ New Playlist',f:function(){var n='Playlist '+(Object.keys(pls).length+1);pls[n]=[];savePl();S.pop();push(plMenu())}});
+ return{title:'Playlists',items:items}}
+function addMenu(tr){var items=Object.keys(pls).map(function(n){return{t:n,f:function(){if(pls[n].indexOf(tr.p)<0)pls[n].push(tr.p);savePl();toast('Added to '+n);S.pop();draw()}}});
+ return{title:'Add to...',empty:'Create a playlist first',items:items,sel:0,off:0}}
+function onlineMenu(){return{title:'Online',items:[
+ {t:'Search Music',f:function(){var b=$('qb');b.style.display='block';$('qi').value='';$('qi').focus()}},
+ {t:'Wi-Fi On/Off',f:function(){A.toggleWifi();toast('Toggling Wi-Fi...');setTimeout(stat,2000)}},
+ {t:'Wi-Fi Settings',f:function(){A.openWifi()}}]}}
+function setMenu(){return{title:'Settings',items:[
+ {t:'Wi-Fi On/Off',f:function(){A.toggleWifi();setTimeout(stat,2000)}},
+ {t:'Wi-Fi Settings',f:function(){A.openWifi()}},
+ {t:'Rescan Library',f:function(){load();toast(lib.length+' songs')}},
+ {t:'Android Settings',f:function(){A.openSettings()}}]}}
+
+// ---- playback ----
+function play(list,i){Q=list.slice();cur=i;A.playQueue(JSON.stringify(Q.map(function(t){return t.p})),i);
+ if(!top().np)push({title:'Now Playing',np:1});else drawNP()}
+function poll(){var s;try{s=JSON.parse(A.state())}catch(e){return}st=s;
+ if(s.i>=0&&s.i!=cur&&Q[s.i]){cur=s.i;if(top().np)drawNP()}
+ if(top().np){var d=s.d||(Q[cur]?Q[cur].d*1000:0);
+  $('pf').style.width=(d?Math.min(100,s.p*100/d):0)+'%';$('tl').textContent=fmt(s.p/1000);$('tr').textContent='-'+fmt((d-s.p)/1000)}}
+
+// ---- online (Audius) ----
+function get(u,f){cbs[++cid]=f;A.get(u,cid)}
+function onHttp(id,ok,b){var f=cbs[id];delete cbs[id];if(f)f(ok?b:null)}
+function host(f){if(H)return f(H);get('https://api.audius.co',function(r){try{H=JSON.parse(r).data[0]}catch(e){H='https://discoveryprovider.audius.co'}f(H)})}
+function search(q){toast('Searching...');host(function(h){
+ get(h+'/v1/tracks/search?query='+encodeURIComponent(q)+'&limit=25&app_name=IPODCLASSIC',function(r){
+  var d;try{d=JSON.parse(r).data}catch(e){}if(!d){toast('Search failed - check Wi-Fi');return}
+  var T=d.map(function(x){return{p:h+'/v1/tracks/'+x.id+'/stream?app_name=IPODCLASSIC',t:x.title,a:x.user?x.user.name:'',b:'Audius',d:x.duration||0}});
+  var sc={title:'Results',empty:'No results',items:T.map(function(t,i){return{t:t.t,s:t.a,f:function(){play(T,i)},tr:t}}),
+   ctx:function(it){var id=++did;dls[id]=it.tr;toast('Downloading...');A.download(it.tr.p,it.tr.t+' - '+it.tr.a,id)}};
+  push(sc);toast('Click=stream, hold=download')})})}
+function onDl(id,p,path){var t=dls[id];
+ if(p==-1){toast('Download failed');delete dls[id]}
+ else if(p==101){lib.push(clean({p:path,t:t.t,a:t.a,b:'Downloads',d:t.d}));toast('Saved: '+t.t);delete dls[id]}
+ else toast('Downloading '+p+'%')}
+$('qi').onkeydown=function(e){if(e.keyCode==13){var q=this.value;this.blur();$('qb').style.display='none';if(q)search(q)}};
+
+// ---- click wheel ----
+var W=$('wheel'),ang=0,acc=0,moved=0,tid=null,lng=0,zone=0,STEP=24;
+function pt(e){var t=(e.touches&&e.touches[0])||e.changedTouches[0],r=W.getBoundingClientRect(),
+ x=t.clientX-(r.left+r.width/2),y=t.clientY-(r.top+r.height/2);
+ return{d:Math.sqrt(x*x+y*y),a:Math.atan2(y,x)*180/Math.PI,R:r.width/2}}
+W.addEventListener('touchstart',function(e){e.preventDefault();var p=pt(e);zone=p.d<p.R*0.34;ang=p.a;acc=0;moved=0;lng=0;
+ if(zone)tid=setTimeout(function(){lng=1;ctx()},600)},false);
+W.addEventListener('touchmove',function(e){e.preventDefault();if(zone)return;var p=pt(e),d=p.a-ang;
+ if(d>180)d-=360;if(d<-180)d+=360;ang=p.a;acc+=d;moved+=Math.abs(d);
+ var step=top().np?14:STEP;
+ while(acc>=step){acc-=step;scroll(1)}while(acc<=-step){acc+=step;scroll(-1)}},false);
+W.addEventListener('touchend',function(e){e.preventDefault();clearTimeout(tid);
+ if(zone){if(!lng)sel();return}
+ if(moved<12){var a=ang;
+  if(a>-135&&a<-45)back();else if(a>=-45&&a<=45)A.next();else if(a>45&&a<135)A.toggle();else A.prev()}},false);
+
+// ---- status & init ----
+function stat(){try{var s=JSON.parse(A.status());$('bat').textContent=(s.c?'+':'')+s.b+'%';$('wf').textContent=s.w?(s.n?'WiFi':'WiFi?'):''}catch(e){}}
+function load(){try{lib=JSON.parse(A.library()).map(clean)}catch(e){lib=[]}}
+function layout(){var w=window.innerWidth,h=window.innerHeight,sz=Math.min(w*0.78,h*0.48);
+ W.style.width=W.style.height=sz+'px';W.style.left=(w-sz)/2+'px';W.style.top=(h*0.5+(h*0.5-sz)/2)+'px';
+ ROWS=Math.max(3,Math.floor((h*0.46-34)/44));if(S.length)draw()}
+window.onresize=layout;layout();load();push(mainMenu());stat();
+setInterval(poll,500);setInterval(stat,5000);
+</script></body></html>
