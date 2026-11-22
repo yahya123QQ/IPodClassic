@@ -410,7 +410,7 @@ jobs:
                   h.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 5.1.1) iPodClassic");
                   return h;
               }
-              static HttpURLConnection open(String u) throws IOException {
+              static HttpURLConnection httpOpen(String u) throws IOException {
                   boolean relaxed = false;
                   for (int i = 0; i < 7; i++) {
                       HttpURLConnection h = conn(u, relaxed); int c;
@@ -430,7 +430,7 @@ jobs:
               @JavascriptInterface public void get(final String url, final int id) {
                   new Thread(() -> {
                       try {
-                          HttpURLConnection h = open(url);
+                          HttpURLConnection h = httpOpen(url);
                           BufferedReader br = new BufferedReader(new InputStreamReader(h.getInputStream(), "UTF-8"));
                           StringBuilder sb = new StringBuilder(); String ln;
                           while ((ln = br.readLine()) != null && sb.length() < 700000) sb.append(ln);
@@ -446,7 +446,7 @@ jobs:
                           File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "iPod");
                           dir.mkdirs();
                           File f = new File(dir, name.replaceAll("[^\\w\\- ]", "_").substring(0, Math.min(80, name.length())) + ".mp3");
-                          HttpURLConnection h = open(url);
+                          HttpURLConnection h = httpOpen(url);
                           int len = h.getContentLength();
                           InputStream in = h.getInputStream(); FileOutputStream o = new FileOutputStream(f);
                           byte[] b = new byte[16384]; int n, last = -1; long t = 0;
