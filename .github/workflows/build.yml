@@ -194,7 +194,7 @@ jobs:
            return{title:'Playlists',items:items}}
           function addMenu(tr){var items=Object.keys(pls).map(function(n){return{t:n,f:function(){if(pls[n].indexOf(tr.p)<0)pls[n].push(tr.p);savePl();toast('Added to '+n);S.pop();S.pop();draw()}}});
            return{title:'Add to...',empty:'Create a playlist first',items:items,sel:0,off:0}}
-          function askQ(mode,ph){qmode=mode;$('qi').placeholder=ph;$('qb').style.display='block';$('qi').value='';$('qi').focus()}
+          function askQ(mode,ph){qmode=mode;$('qi').placeholder=ph;$('qb').style.display='block';$('qi').value='';$('sg').innerHTML='';$('qi').focus();if(mode=='aud')trending()}
           function onlineMenu(){return{title:'Online',items:[
            {t:'Search Music',s:'Audius',f:function(){askQ('aud','Song or artist...')}},
            {t:'Search Podcasts',f:function(){askQ('pod','Podcast name...')}},
@@ -224,28 +224,40 @@ jobs:
            if(p==-1){toast('Download failed');delete dls[id]}
            else if(p==101){lib.push(clean({p:path,t:t.t,a:t.a,b:'Downloads',d:t.d}));toast('Saved: '+t.t);delete dls[id]}
            else toast('Downloading '+p+'%')}
-          function trackScreen(T,title){return{title:title,empty:'No results',items:T.map(function(t,i){return{t:t.t,s:t.a,f:function(){play(T,i)},tr:t,dl:1,img:t.img}}),
+          function trackScreen(T,title){return{title:title,empty:'No results',items:T.map(function(t,i){return{t:t.t,s:t.a,f:function(){play(T,i)},tr:t,dl:t.nodl?0:1,img:t.img}}),
            ctx:function(it){dlTrack(it.tr)}}}
-          function dlTrack(t){if(!t||t.p.indexOf('http')!=0){toast('Already on phone');return}var id=++did;dls[id]=t;toast('Downloading...');A.download(t.p,t.t+' - '+t.a,id,t.img||'')}
+          function dlTrack(t){if(t&&t.nodl){toast('Preview only (30s) - cannot download');return}if(!t||t.p.indexOf('http')!=0){toast('Already on phone');return}var id=++did;dls[id]=t;toast('Downloading...');A.download(t.p,t.t+' - '+t.a,id,t.img||'')}
           function host(f){if(H)return f(H);get('https://api.audius.co',function(r){try{H=JSON.parse(r).data[0]}catch(e){H='https://discoveryprovider.audius.co'}f(H)})}
           function byPop(a,b){return(b.play_count||0)-(a.play_count||0)}
           function audSearch(q,fixed){toast('Searching...');host(function(h){
            get(h+'/v1/tracks/search?query='+encodeURIComponent(q)+'&limit=25&app_name=IPODCLASSIC',function(r){
             var d;try{d=JSON.parse(r).data}catch(e){}if(!d){toast('Search failed - check Wi-Fi');return}
-            if(!d.length){if(fixed){toast('No results');return}
+            if(!d.length){if(fixed){dzFallback(q);return}
              get('https://itunes.apple.com/search?media=music&entity=song&limit=1&term='+encodeURIComponent(q),function(r2){
-              try{var x=JSON.parse(r2).results[0];if(x){toast('Showing results for: '+x.trackName);audSearch(x.trackName+' '+x.artistName,true);return}}catch(e){}toast('No results')});return}
+              try{var x=JSON.parse(r2).results[0];if(x){toast('Showing results for: '+x.trackName);audSearch(x.trackName+' '+x.artistName,true);return}}catch(e){}dzFallback(q)});return}
             d.sort(byPop);
             var T=d.map(function(x){return{p:h+'/v1/tracks/'+x.id+'/stream?app_name=IPODCLASSIC',t:x.title,a:x.user?x.user.name:'',b:'Audius',d:x.duration||0,img:x.artwork?x.artwork['150x150']:''}});
             push(trackScreen(T,'Top results'));toast('Most popular first. Tap = play, arrow = download')})})}
           var sgt=null,sgq=[];
-          function suggest(q){var out=function(it){sgq=it.map(function(x){return x.q});$('sg').innerHTML=it.map(function(x,i){return'<div class="g" data-k="'+i+'">'+(x.img?'<img class="th" src="'+x.img+'">':'')+'<div class="tt">'+esc(x.t)+'</div></div>'}).join('')};
-           if(qmode=='pod'){get('https://itunes.apple.com/search?media=podcast&limit=5&term='+encodeURIComponent(q),function(r){try{out(JSON.parse(r).results.map(function(x){return{t:x.collectionName,q:x.collectionName,img:x.artworkUrl60}}))}catch(e){}});return}
-           host(function(h){get(h+'/v1/tracks/search?query='+encodeURIComponent(q)+'&limit=10&app_name=IPODCLASSIC',function(r){try{out(JSON.parse(r).data.sort(byPop).slice(0,5).map(function(x){return{t:x.title+' - '+(x.user?x.user.name:''),q:x.title,img:x.artwork?x.artwork['150x150']:''}}))}catch(e){}})})}
+          var sgc={},sgSeq=0,trCache=null;
+          function dzItems(d){var seen={},o=[];d.sort(function(a,b){return(b.rank||0)-(a.rank||0)});
+           d.forEach(function(x){if(!x||!x.artist)return;var k=(x.title+'|'+x.artist.name).toLowerCase();if(seen[k])return;seen[k]=1;
+            o.push({t:x.title+' - '+x.artist.name,q:x.title+' '+x.artist.name,img:x.album?x.album.cover_small:'',
+             trk:{p:x.preview,t:x.title,a:x.artist.name,b:'Deezer preview',d:30,img:x.album?x.album.cover_medium:'',nodl:1}})});return o}
+          function showSg(it){sgq=it;$('sg').innerHTML=it.slice(0,6).map(function(x,i){return'<div class="g" data-k="'+i+'">'+(x.img?'<img class="th" src="'+x.img+'">':'')+'<div class="tt">'+esc(x.t)+'</div></div>'}).join('')}
+          function trending(){if(trCache){showSg(trCache);return}
+           get('https://api.deezer.com/chart/0/tracks?limit=12',function(r){try{trCache=dzItems(JSON.parse(r).data);if(!$('qi').value)showSg(trCache)}catch(e){}})}
+          function suggest(q){var key=qmode+q.toLowerCase();if(sgc[key]){showSg(sgc[key]);return}
+           var my=++sgSeq,done=function(it){sgc[key]=it;if(my==sgSeq)showSg(it)};
+           if(qmode=='pod'){get('https://itunes.apple.com/search?media=podcast&limit=5&term='+encodeURIComponent(q),function(r){try{done(JSON.parse(r).results.slice(0,5).map(function(x){return{t:x.collectionName,q:x.collectionName,img:x.artworkUrl60}}))}catch(e){}});return}
+           get('https://api.deezer.com/search?q='+encodeURIComponent(q)+'&order=RANKING&limit=20',function(r){try{done(dzItems(JSON.parse(r).data))}catch(e){}})}
+          function dzFallback(q){get('https://api.deezer.com/search?q='+encodeURIComponent(q)+'&order=RANKING&limit=20',function(r){var it=[];try{it=dzItems(JSON.parse(r).data)}catch(e){}
+           if(!it.length){toast('No results');return}
+           push(trackScreen(it.map(function(x){return x.trk}),'Previews (30s)'));toast('Full song not found - 30s previews')})}
           function doSearch(q){$('sg').innerHTML='';if(qmode=='pod')podSearch(q);else audSearch(q)}
-          $('qi').oninput=function(){clearTimeout(sgt);var q=this.value.replace(/^\s+|\s+$/g,'');if(q.length<2){$('sg').innerHTML='';return}sgt=setTimeout(function(){suggest(q)},450)};
+          $('qi').oninput=function(){clearTimeout(sgt);var q=this.value.replace(/^\s+|\s+$/g,'');if(!q){sgq=[];$('sg').innerHTML='';if(qmode=='aud')trending();return}sgt=setTimeout(function(){suggest(q)},250)};
           $('sg').addEventListener('click',function(e){var n=e.target;while(n&&n!==this&&!(n.getAttribute&&n.getAttribute('data-k')!=null))n=n.parentNode;
-           if(n&&n.getAttribute&&n.getAttribute('data-k')!=null){$('qb').style.display='none';$('qi').blur();doSearch(sgq[parseInt(n.getAttribute('data-k'),10)])}},false);
+           if(n&&n.getAttribute&&n.getAttribute('data-k')!=null){$('qb').style.display='none';$('qi').blur();doSearch(sgq[parseInt(n.getAttribute('data-k'),10)].q)}},false);
           function podSearch(q){toast('Searching...');
            get('https://itunes.apple.com/search?media=podcast&limit=20&term='+encodeURIComponent(q),function(r){
             var d;try{d=JSON.parse(r).results}catch(e){}if(!d||!d.length){toast('No results - check Wi-Fi');return}
