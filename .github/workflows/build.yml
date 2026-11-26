@@ -1,62 +1,989 @@
-
 name: Build iPod Classic APK
 
 on:
   push:
-    branches: [main, master]
+    branches: [ "main", "master" ]
   workflow_dispatch:
-
-permissions:
-  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: 'temurin'
           java-version: '17'
 
-      - name: Locate Android SDK
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          test -d "$ANDROID_HOME"
-          echo "SDK found"
-
-      - name: Accept SDK licenses
-        run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
-
-      - name: Install SDK 33
-        run: |
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            --sdk_root="$ANDROID_HOME" \
-            "platforms;android-33" \
-            "build-tools;33.0.2"
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
         with:
-          gradle-version: '7.5'
+          cmdline-version: '11.0'
+          packages: |
+            platform-tools
+            platforms;android-34
+            build-tools;34.0.0
+          accept-android-sdk-licenses: true
 
-      - name: Build APK
+      - name: Create Android project with iPod Classic UI & Playback Engine
         run: |
-          gradle assembleDebug --no-daemon --stacktrace
+          set -e
+          mkdir -p app/src/main/java/com/ipodclassic/player
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/assets
 
-      - name: Check APK
-        run: |
-          test -s app/build/outputs/apk/debug/app-debug.apk
+          cat << 'EOF' > settings.gradle
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "iPodClassicPlayer"
+          include ':app'
+          EOF
 
-      - name: Upload APK
+          cat << 'EOF' > gradle.properties
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+
+          cat << 'EOF' > build.gradle
+          plugins {
+              id 'com.android.application' version '8.1.4' apply false
+          }
+          EOF
+
+          cat << 'EOF' > app/build.gradle
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.ipodclassic.player'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId "com.ipodclassic.player"
+                  minSdk 21
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                  }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+          }
+          EOF
+
+          cat << 'EOF' > app/proguard-rules.pro
+          # Keep classes
+          EOF
+
+          cat << 'EOF' > app/src/main/res/values/strings.xml
+          <resources>
+              <string name="app_name">iPod Classic</string>
+          </resources>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/layout/activity_main.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:background="#111111">
+
+              <WebView
+                  android:id="@+id/webview"
+                  android:layout_width="match_parent"
+                  android:layout_height="match_parent" />
+          </FrameLayout>
+          EOF
+
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+              <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+
+              <application
+                  android:allowBackup="true"
+                  android:label="@string/app_name"
+                  android:usesCleartextTraffic="true"
+                  android:theme="@style/Theme.AppCompat.NoActionBar">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:configChanges="orientation|screenSize|keyboardHidden">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/ipodclassic/player/MainActivity.java
+          package com.ipodclassic.player;
+
+          import android.Manifest;
+          import android.content.ContentResolver;
+          import android.content.pm.PackageManager;
+          import android.database.Cursor;
+          import android.media.AudioAttributes;
+          import android.media.MediaPlayer;
+          import android.net.Uri;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.provider.MediaStore;
+          import android.webkit.JavascriptInterface;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import androidx.appcompat.app.AppCompatActivity;
+          import androidx.core.app.ActivityCompat;
+          import androidx.core.content.ContextCompat;
+          import org.json.JSONArray;
+          import org.json.JSONObject;
+          import java.io.File;
+          import java.io.FileOutputStream;
+          import java.io.InputStream;
+          import java.net.HttpURLConnection;
+          import java.net.URL;
+
+          public class MainActivity extends AppCompatActivity {
+              private WebView webView;
+              private MediaPlayer mediaPlayer;
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  setContentView(R.layout.activity_main);
+
+                  requestAudioPermission();
+
+                  mediaPlayer = new MediaPlayer();
+                  mediaPlayer.setAudioAttributes(
+                      new AudioAttributes.Builder()
+                          .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                          .setUsage(AudioAttributes.USAGE_MEDIA)
+                          .build()
+                  );
+
+                  mediaPlayer.setOnCompletionListener(mp -> runOnUiThread(() ->
+                      webView.evaluateJavascript("if(window.onNativeTrackEnded){window.onNativeTrackEnded();}", null)
+                  ));
+
+                  webView = findViewById(R.id.webview);
+                  WebSettings settings = webView.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  settings.setDomStorageEnabled(true);
+                  settings.setAllowFileAccess(true);
+                  settings.setMediaPlaybackRequiresUserGesture(false);
+
+                  webView.setWebViewClient(new WebViewClient());
+                  webView.addJavascriptInterface(new NativeBridge(), "AndroidBridge");
+                  webView.loadUrl("file:///android_asset/index.html");
+              }
+
+              private void requestAudioPermission() {
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                      if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO)
+                              != PackageManager.PERMISSION_GRANTED) {
+                          ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_MEDIA_AUDIO}, 101);
+                      }
+                  } else {
+                      if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                              != PackageManager.PERMISSION_GRANTED) {
+                          ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 101);
+                      }
+                  }
+              }
+
+              @Override
+              protected void onDestroy() {
+                  super.onDestroy();
+                  if (mediaPlayer != null) {
+                      mediaPlayer.release();
+                      mediaPlayer = null;
+                  }
+              }
+
+              public class NativeBridge {
+                  @JavascriptInterface
+                  public void playUrl(String url) {
+                      runOnUiThread(() -> {
+                          try {
+                              mediaPlayer.reset();
+                              mediaPlayer.setDataSource(url);
+                              mediaPlayer.prepareAsync();
+                              mediaPlayer.setOnPreparedListener(mp -> {
+                                  mp.start();
+                                  webView.evaluateJavascript("if(window.onNativeStateChange){window.onNativeStateChange(true);}", null);
+                              });
+                          } catch (Exception e) {
+                              e.printStackTrace();
+                          }
+                      });
+                  }
+
+                  @JavascriptInterface
+                  public void togglePlayPause() {
+                      runOnUiThread(() -> {
+                          if (mediaPlayer == null) return;
+                          if (mediaPlayer.isPlaying()) {
+                              mediaPlayer.pause();
+                              webView.evaluateJavascript("if(window.onNativeStateChange){window.onNativeStateChange(false);}", null);
+                          } else {
+                              mediaPlayer.start();
+                              webView.evaluateJavascript("if(window.onNativeStateChange){window.onNativeStateChange(true);}", null);
+                          }
+                      });
+                  }
+
+                  @JavascriptInterface
+                  public void seekTo(int seconds) {
+                      runOnUiThread(() -> {
+                          if (mediaPlayer != null) {
+                              mediaPlayer.seekTo(seconds * 1000);
+                          }
+                      });
+                  }
+
+                  @JavascriptInterface
+                  public String getPlaybackStatus() {
+                      try {
+                          JSONObject obj = new JSONObject();
+                          boolean playing = mediaPlayer != null && mediaPlayer.isPlaying();
+                          int pos = mediaPlayer != null ? mediaPlayer.getCurrentPosition() / 1000 : 0;
+                          int dur = mediaPlayer != null && mediaPlayer.getDuration() > 0 ? mediaPlayer.getDuration() / 1000 : 0;
+                          obj.put("playing", playing);
+                          obj.put("position", pos);
+                          obj.put("duration", dur);
+                          return obj.toString();
+                      } catch (Exception e) {
+                          return "{\"playing\":false,\"position\":0,\"duration\":0}";
+                      }
+                  }
+
+                  @JavascriptInterface
+                  public String getLocalTracks() {
+                      JSONArray list = new JSONArray();
+                      try {
+                          ContentResolver resolver = getContentResolver();
+                          Uri uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+                          String[] projection = {
+                              MediaStore.Audio.Media._ID,
+                              MediaStore.Audio.Media.TITLE,
+                              MediaStore.Audio.Media.ARTIST,
+                              MediaStore.Audio.Media.DATA
+                          };
+                          Cursor cursor = resolver.query(uri, projection, MediaStore.Audio.Media.IS_MUSIC + " != 0", null, null);
+                          if (cursor != null) {
+                              while (cursor.moveToNext()) {
+                                  JSONObject item = new JSONObject();
+                                  item.put("id", cursor.getString(0));
+                                  item.put("title", cursor.getString(1) != null ? cursor.getString(1) : "Local Track");
+                                  item.put("artist", cursor.getString(2) != null ? cursor.getString(2) : "Local Artist");
+                                  item.put("url", "file://" + cursor.getString(3));
+                                  item.put("source", "Local");
+                                  item.put("category", "songs");
+                                  list.put(item);
+                              }
+                              cursor.close();
+                          }
+                      } catch (Exception e) {
+                          e.printStackTrace();
+                      }
+                      return list.toString();
+                  }
+
+                  @JavascriptInterface
+                  public String cacheTrackOnce(String id, String url) {
+                      try {
+                          File cacheDir = new File(getCacheDir(), "tracks");
+                          if (!cacheDir.exists()) cacheDir.mkdirs();
+                          String safeName = id.replaceAll("[^a-zA-Z0-9_-]", "_") + ".mp3";
+                          File outFile = new File(cacheDir, safeName);
+                          if (outFile.exists() && outFile.length() > 1024) {
+                              return "file://" + outFile.getAbsolutePath();
+                          }
+                          URL u = new URL(url);
+                          HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                          conn.setConnectTimeout(10000);
+                          conn.setReadTimeout(15000);
+                          conn.connect();
+                          if (conn.getResponseCode() == 200) {
+                              InputStream in = conn.getInputStream();
+                              FileOutputStream out = new FileOutputStream(outFile);
+                              byte[] buf = new byte[4096];
+                              int len;
+                              while ((len = in.read(buf)) != -1) {
+                                  out.write(buf, 0, len);
+                              }
+                              out.flush();
+                              out.close();
+                              in.close();
+                              return "file://" + outFile.getAbsolutePath();
+                          }
+                      } catch (Exception e) {
+                          e.printStackTrace();
+                      }
+                      return url;
+                  }
+              }
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/assets/index.html
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <title>iPod Classic</title>
+            <style>
+              * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+              body {
+                margin: 0;
+                background: #141414;
+                color: #f4f4f4;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+                overflow: hidden;
+              }
+              .screen {
+                flex: 1;
+                background: #1b1d21;
+                margin: 10px 12px 6px;
+                border: 2px solid #383c44;
+                border-radius: 10px;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+              }
+              .topbar {
+                background: linear-gradient(to bottom, #3b4048, #23262b);
+                padding: 8px 12px;
+                font-size: 14px;
+                font-weight: 700;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                border-bottom: 1px solid #111;
+              }
+              .tabs {
+                display: flex;
+                background: #181a1f;
+                border-bottom: 1px solid #2e333d;
+              }
+              .tab-btn {
+                flex: 1;
+                padding: 8px 4px;
+                background: transparent;
+                border: none;
+                color: #9ba4b4;
+                font-size: 12px;
+                font-weight: 700;
+                border-bottom: 2px solid transparent;
+              }
+              .tab-btn.active {
+                color: #4cd964;
+                border-bottom-color: #34c759;
+                background: #20242b;
+              }
+              .search-box {
+                display: flex;
+                gap: 6px;
+                padding: 8px;
+                background: #23272e;
+                border-bottom: 1px solid #323741;
+              }
+              .search-box input {
+                flex: 1;
+                padding: 8px 10px;
+                border-radius: 6px;
+                border: 1px solid #454c59;
+                background: #131519;
+                color: #fff;
+                font-size: 14px;
+                outline: none;
+              }
+              .search-box button {
+                padding: 8px 12px;
+                border: none;
+                border-radius: 6px;
+                background: #2d7ff9;
+                color: #fff;
+                font-weight: 700;
+                font-size: 13px;
+              }
+              .list {
+                flex: 1;
+                overflow-y: auto;
+              }
+              .item {
+                padding: 10px 12px;
+                border-bottom: 1px solid #282c34;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+              }
+              .item:active { background: #2d589c; }
+              .thumb {
+                width: 44px;
+                height: 44px;
+                border-radius: 6px;
+                object-fit: cover;
+                background: #2d323b;
+                flex-shrink: 0;
+              }
+              .meta { flex: 1; min-width: 0; }
+              .title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+              .sub { font-size: 12px; color: #a5aebd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+              .badge { font-size: 11px; color: #7db0ff; }
+
+              .now-playing {
+                flex: 1;
+                padding: 12px;
+                display: none;
+                flex-direction: column;
+                justify-content: space-between;
+              }
+              .now-playing.active { display: flex; }
+              .np-top {
+                display: flex;
+                gap: 12px;
+                align-items: center;
+              }
+              .np-art {
+                width: 84px;
+                height: 84px;
+                border-radius: 8px;
+                object-fit: cover;
+                background: #2c313a;
+                border: 1px solid #49505e;
+              }
+              .np-info { flex: 1; min-width: 0; }
+              .np-title { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+              .np-artist { font-size: 13px; color: #b5bece; margin-top: 2px; }
+              .np-status { font-size: 12px; color: #4cd964; margin-top: 4px; }
+
+              .shuffle-bar {
+                display: flex;
+                justify-content: flex-end;
+                margin-top: 8px;
+              }
+              .shuffle-btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 12px;
+                border-radius: 999px;
+                border: 1px solid #4b5260;
+                background: #252932;
+                color: #d6dce6;
+                font-size: 12px;
+                font-weight: 700;
+              }
+              .shuffle-btn.on {
+                background: #1b4326;
+                border-color: #34c759;
+                color: #4cd964;
+              }
+              .shuffle-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: #78808e;
+              }
+              .shuffle-btn.on .shuffle-dot {
+                background: #34c759;
+              }
+
+              .seek-wrap { margin-top: 8px; }
+              input[type="range"] { width: 100%; accent-color: #34c759; }
+              .times { display: flex; justify-content: space-between; font-size: 11px; color: #a5aebd; }
+
+              .wheel-area {
+                height: 215px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                padding-bottom: 10px;
+              }
+              .wheel {
+                width: 196px;
+                height: 196px;
+                border-radius: 50%;
+                background: #2c2f36;
+                border: 2px solid #444954;
+                position: relative;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+              }
+              .center-btn {
+                width: 72px;
+                height: 72px;
+                border-radius: 50%;
+                background: #191b1f;
+                border: 1px solid #484e5a;
+                color: #fff;
+                font-weight: 700;
+                font-size: 12px;
+                z-index: 2;
+              }
+              .w-btn {
+                position: absolute;
+                background: none;
+                border: none;
+                color: #d5dbe6;
+                font-weight: 700;
+                font-size: 12px;
+              }
+              .btn-menu { top: 14px; }
+              .btn-prev { left: 14px; }
+              .btn-next { right: 14px; }
+              .btn-play { bottom: 14px; }
+            </style>
+          </head>
+          <body>
+            <div class="screen">
+              <div class="topbar">
+                <span id="screenTitle">iPod Classic</span>
+                <span id="modeTag" class="badge">Songs</span>
+              </div>
+
+              <div class="tabs" id="tabsBar">
+                <button class="tab-btn active" data-tab="songs" id="tabSongs">Songs</button>
+                <button class="tab-btn" data-tab="podcasts" id="tabPodcasts">Podcasts</button>
+                <button class="tab-btn" data-tab="quran" id="tabQuran">Quran</button>
+              </div>
+
+              <div class="search-box" id="searchBar">
+                <input id="queryInput" type="text" placeholder="Search tracks..." />
+                <button id="searchBtn">Search</button>
+                <button id="localBtn" style="background:#3a414e;">Local</button>
+              </div>
+
+              <div class="list" id="resultsList"></div>
+
+              <div class="now-playing" id="nowPlayingView">
+                <div>
+                  <div class="np-top">
+                    <img id="npArt" class="np-art" src="" alt="" />
+                    <div class="np-info">
+                      <div id="npTitle" class="np-title">No Track</div>
+                      <div id="npArtist" class="np-artist">-</div>
+                      <div id="npStatus" class="np-status">Idle</div>
+                    </div>
+                  </div>
+                  <div class="shuffle-bar">
+                    <button id="shuffleBtn" class="shuffle-btn" type="button">
+                      <span class="shuffle-dot"></span>
+                      <span id="shuffleLabel">Shuffle: OFF</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="seek-wrap">
+                  <input id="seekSlider" type="range" min="0" max="100" value="0" />
+                  <div class="times">
+                    <span id="curTime">0:00</span>
+                    <span id="durTime">0:00</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="wheel-area">
+              <div class="wheel">
+                <button class="w-btn btn-menu" id="menuBtn">MENU</button>
+                <button class="w-btn btn-prev" id="prevBtn">|&lt;&lt;</button>
+                <button class="w-btn btn-next" id="nextBtn">&gt;&gt;|</button>
+                <button class="w-btn btn-play" id="playBtn">&gt;||</button>
+                <button class="center-btn" id="centerBtn">SELECT</button>
+              </div>
+            </div>
+
+            <script>
+              const FEATURED_SONGS = [
+                { id: "s_starboy", title: "Starboy", artist: "The Weeknd ft. Daft Punk", art: "https://i.scdn.co/image/ab67616d0000b2734718e2b124f79258be7bc452", url: "https://archive.org/download/starboy_202204/Starboy.mp3", source: "Global Hit", popularity: 99000 },
+                { id: "s_blinding", title: "Blinding Lights", artist: "The Weeknd", art: "https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36", url: "https://archive.org/download/blinding-lights_202102/Blinding%20Lights.mp3", source: "Global Hit", popularity: 98000 },
+                { id: "s_baby_doll", title: "Baby Doll", artist: "Ari Abdul", art: "https://i.scdn.co/image/ab67616d0000b273c46022a9b1b11d4f6e49d9b4", url: "https://archive.org/download/baby-doll-ari-abdul/Baby%20Doll.mp3", source: "Global Hit", popularity: 95000 },
+                { id: "s_505", title: "505", artist: "Arctic Monkeys", art: "https://i.scdn.co/image/ab67616d0000b273b118a3f9be8c2a68a6e2d0e7", url: "https://archive.org/download/505-arctic-monkeys_202203/505.mp3", source: "Global Hit", popularity: 94000 },
+                { id: "s_mgh_1", title: "Enta Maalem", artist: "Saad Lamjarred", art: "https://archive.org/services/img/enta-maalem", url: "https://archive.org/download/enta-maalem/Enta%20Maalem.mp3", source: "Moroccan Hit", popularity: 96000 },
+                { id: "s_mgh_2", title: "Casablanca", artist: "ElGrandeToto", art: "https://archive.org/services/img/elgrandetoto-casablanca", url: "https://archive.org/download/elgrandetoto-casablanca/Casablanca.mp3", source: "Moroccan Hit", popularity: 93000 },
+                { id: "s_mgh_3", title: "Bghitini Ki Nti", artist: "Zouhair Bahaoui", art: "https://archive.org/services/img/zouhair-bahaoui-bghitini", url: "https://archive.org/download/zouhair-bahaoui-bghitini/Bghitini.mp3", source: "Moroccan Hit", popularity: 91000 },
+                { id: "s_mgh_4", title: "L7ala", artist: "Manal", art: "https://archive.org/services/img/manal-l7ala", url: "https://archive.org/download/manal-l7ala/L7ala.mp3", source: "Moroccan Hit", popularity: 90000 }
+              ];
+
+              const QURAN_TRACKS = [
+                { id: "q_fatiha", title: "Surat Al-Fatihah", artist: "Mishary Rashid Alafasy", art: "https://archive.org/services/img/Alafasy_128kbps", url: "https://server8.mp3quran.net/afs/001.mp3", source: "Quran", popularity: 100000 },
+                { id: "q_baqarah", title: "Surat Al-Baqarah", artist: "Mishary Rashid Alafasy", art: "https://archive.org/services/img/Alafasy_128kbps", url: "https://server8.mp3quran.net/afs/002.mp3", source: "Quran", popularity: 99000 },
+                { id: "q_kahf", title: "Surat Al-Kahf", artist: "Abdul Basit Abdul Samad", art: "https://archive.org/services/img/basit_128kbps", url: "https://server7.mp3quran.net/basit/018.mp3", source: "Quran", popularity: 98000 },
+                { id: "q_yaseen", title: "Surat Ya-Sin", artist: "Maher Al Muaiqly", art: "https://archive.org/services/img/maher_almuaiqly_128kbps", url: "https://server12.mp3quran.net/maher/036.mp3", source: "Quran", popularity: 97000 },
+                { id: "q_rahman", title: "Surat Ar-Rahman", artist: "Yasser Al-Dosari", art: "https://archive.org/services/img/yasser_128kbps", url: "https://server11.mp3quran.net/yasser/055.mp3", source: "Quran", popularity: 96000 },
+                { id: "q_mulk", title: "Surat Al-Mulk", artist: "Mishary Rashid Alafasy", art: "https://archive.org/services/img/Alafasy_128kbps", url: "https://server8.mp3quran.net/afs/067.mp3", source: "Quran", popularity: 95000 }
+              ];
+
+              const state = {
+                activeTab: "songs",
+                tracks: [...FEATURED_SONGS],
+                currentIndex: -1,
+                shuffle: false,
+                inNowPlaying: false
+              };
+
+              const artCache = new Map();
+
+              function fmt(sec) {
+                sec = Math.max(0, Math.floor(sec || 0));
+                const m = Math.floor(sec / 60);
+                const s = sec % 60;
+                return `${m}:${s < 10 ? "0" : ""}${s}`;
+              }
+
+              function setNowPlayingMode(active) {
+                state.inNowPlaying = active;
+                document.getElementById("tabsBar").style.display = active ? "none" : "flex";
+                document.getElementById("searchBar").style.display = active ? "none" : "flex";
+                document.getElementById("resultsList").style.display = active ? "none" : "block";
+                document.getElementById("nowPlayingView").classList.toggle("active", active);
+                document.getElementById("screenTitle").textContent = active ? "Now Playing" : "iPod Classic";
+              }
+
+              function updateShuffleUI() {
+                const btn = document.getElementById("shuffleBtn");
+                const lbl = document.getElementById("shuffleLabel");
+                btn.classList.toggle("on", state.shuffle);
+                lbl.textContent = state.shuffle ? "Shuffle: ON" : "Shuffle: OFF";
+              }
+
+              function popularityScore(track, query) {
+                const q = (query || "").toLowerCase().trim();
+                const title = (track.title || "").toLowerCase();
+                const artist = (track.artist || "").toLowerCase();
+                let score = track.popularity || 0;
+
+                if (q) {
+                  if (title === q) score += 700;
+                  else if (title.startsWith(q)) score += 350;
+                  else if (title.includes(q)) score += 160;
+
+                  if (artist.includes(q)) score += 100;
+                  if (/\b(remix|lofi|slowed|reverb|cover|nightcore|instrumental)\b/i.test(title) &&
+                      !/\b(remix|lofi|slowed|reverb|cover|nightcore|instrumental)\b/i.test(q)) {
+                    score -= 220;
+                  }
+                }
+                return score;
+              }
+
+              async function searchAudius(q) {
+                const res = await fetch(`https://discoveryprovider.audius.co/v1/tracks/search?query=${encodeURIComponent(q)}&app_name=ipod_classic`);
+                const data = await res.json();
+                const arr = Array.isArray(data.data) ? data.data : [];
+                return arr.map(t => ({
+                  id: "audius_" + t.id,
+                  title: t.title || "Unknown Title",
+                  artist: (t.user && (t.user.name || t.user.handle)) || "Audius Artist",
+                  art: (t.artwork && (t.artwork["150x150"] || t.artwork["480x480"])) || "",
+                  url: `https://discoveryprovider.audius.co/v1/tracks/${t.id}/stream?app_name=ipod_classic`,
+                  source: "Audius",
+                  popularity: (t.play_count || 0) + (t.favorite_count || 0) * 5
+                }));
+              }
+
+              async function searchArchiveAudio(q) {
+                const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(q + " AND mediatype:audio")}&fl[]=identifier,title,creator,downloads&rows=12&page=1&output=json`;
+                const res = await fetch(url);
+                const data = await res.json();
+                const docs = (data.response && data.response.docs) || [];
+                return docs.map(d => ({
+                  id: "archive_" + d.identifier,
+                  title: Array.isArray(d.title) ? d.title[0] : (d.title || d.identifier),
+                  artist: Array.isArray(d.creator) ? d.creator[0] : (d.creator || "Internet Archive"),
+                  art: `https://archive.org/services/img/${d.identifier}`,
+                  url: `https://archive.org/download/${d.identifier}`,
+                  source: "Archive",
+                  popularity: Number(d.downloads || 0)
+                }));
+              }
+
+              async function searchPodcasts(q) {
+                const res = await fetch(`https://itunes.apple.com/search?media=podcast&limit=15&term=${encodeURIComponent(q || "news")}`);
+                const data = await res.json();
+                const items = Array.isArray(data.results) ? data.results : [];
+                return items.filter(p => p.feedUrl || p.artworkUrl100).map((p, idx) => ({
+                  id: "pod_" + (p.collectionId || idx),
+                  title: p.trackName || p.collectionName || "Podcast",
+                  artist: p.artistName || "Podcast",
+                  art: p.artworkUrl100 || p.artworkUrl60 || "",
+                  url: p.feedUrl || "",
+                  source: "Podcast",
+                  popularity: 5000 - idx * 150
+                }));
+              }
+
+              function renderList(tracks) {
+                const listEl = document.getElementById("resultsList");
+                listEl.innerHTML = "";
+                tracks.forEach((t, idx) => {
+                  const row = document.createElement("div");
+                  row.className = "item";
+                  const imgSrc = artCache.get(t.id) || t.art || "";
+                  row.innerHTML = `
+                    <img class="thumb" src="${imgSrc}" onerror="this.style.visibility='hidden'" />
+                    <div class="meta">
+                      <div class="title">${escapeHtml(t.title)}</div>
+                      <div class="sub">${escapeHtml(t.artist)}</div>
+                    </div>
+                    <div class="badge">${escapeHtml(t.source)}</div>
+                  `;
+                  row.onclick = () => playTrackAt(idx);
+                  listEl.appendChild(row);
+                });
+              }
+
+              function escapeHtml(s) {
+                return String(s || "").replace(/[&<>"']/g, c => ({
+                  "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
+                }[c]));
+              }
+
+              async function switchTab(tabName) {
+                state.activeTab = tabName;
+                document.querySelectorAll(".tab-btn").forEach(b => {
+                  b.classList.toggle("active", b.dataset.tab === tabName);
+                });
+                setNowPlayingMode(false);
+
+                if (tabName === "songs") {
+                  document.getElementById("modeTag").textContent = "Songs";
+                  state.tracks = [...FEATURED_SONGS];
+                  renderList(state.tracks);
+                } else if (tabName === "quran") {
+                  document.getElementById("modeTag").textContent = "Quran";
+                  state.tracks = [...QURAN_TRACKS];
+                  renderList(state.tracks);
+                } else if (tabName === "podcasts") {
+                  document.getElementById("modeTag").textContent = "Podcasts...";
+                  const pods = await searchPodcasts(document.getElementById("queryInput").value.trim() || "top");
+                  state.tracks = pods;
+                  renderList(state.tracks);
+                  document.getElementById("modeTag").textContent = `Podcasts (${pods.length})`;
+                }
+              }
+
+              async function performSearch() {
+                const q = document.getElementById("queryInput").value.trim();
+                setNowPlayingMode(false);
+
+                if (state.activeTab === "quran") {
+                  const filtered = QURAN_TRACKS.filter(item =>
+                    !q || item.title.toLowerCase().includes(q.toLowerCase()) || item.artist.toLowerCase().includes(q.toLowerCase())
+                  );
+                  state.tracks = filtered;
+                  renderList(state.tracks);
+                  document.getElementById("modeTag").textContent = `Quran (${filtered.length})`;
+                  return;
+                }
+
+                if (state.activeTab === "podcasts") {
+                  document.getElementById("modeTag").textContent = "Searching...";
+                  const pods = await searchPodcasts(q || "top");
+                  state.tracks = pods;
+                  renderList(state.tracks);
+                  document.getElementById("modeTag").textContent = `Podcasts (${pods.length})`;
+                  return;
+                }
+
+                if (!q) {
+                  state.tracks = [...FEATURED_SONGS];
+                  renderList(state.tracks);
+                  document.getElementById("modeTag").textContent = "Songs";
+                  return;
+                }
+
+                document.getElementById("modeTag").textContent = "Searching...";
+                const localMatches = FEATURED_SONGS.filter(s =>
+                  s.title.toLowerCase().includes(q.toLowerCase()) || s.artist.toLowerCase().includes(q.toLowerCase())
+                );
+                const results = await Promise.allSettled([
+                  searchAudius(q),
+                  searchArchiveAudio(q)
+                ]);
+
+                let merged = [...localMatches];
+                results.forEach(r => {
+                  if (r.status === "fulfilled" && Array.isArray(r.value)) {
+                    merged = merged.concat(r.value);
+                  }
+                });
+
+                merged.sort((a, b) => popularityScore(b, q) - popularityScore(a, q));
+                state.tracks = merged.slice(0, 30);
+                renderList(state.tracks);
+                document.getElementById("modeTag").textContent = `${state.tracks.length} results`;
+              }
+
+              function loadLocal() {
+                setNowPlayingMode(false);
+                if (window.AndroidBridge && window.AndroidBridge.getLocalTracks) {
+                  try {
+                    const local = JSON.parse(window.AndroidBridge.getLocalTracks());
+                    state.tracks = local;
+                    renderList(state.tracks);
+                    document.getElementById("modeTag").textContent = `Local (${local.length})`;
+                  } catch (e) {
+                    document.getElementById("modeTag").textContent = "Local error";
+                  }
+                }
+              }
+
+              function playTrackAt(index) {
+                if (!state.tracks.length || index < 0 || index >= state.tracks.length) return;
+                state.currentIndex = index;
+                const track = state.tracks[index];
+
+                if (track.art) {
+                  artCache.set(track.id, track.art);
+                }
+
+                setNowPlayingMode(true);
+                document.getElementById("npTitle").textContent = track.title;
+                document.getElementById("npArtist").textContent = track.artist;
+                document.getElementById("npArt").src = artCache.get(track.id) || "";
+                document.getElementById("npStatus").textContent = "Loading...";
+
+                let finalUrl = track.url;
+                if (window.AndroidBridge && finalUrl && finalUrl.startsWith("http") && track.source !== "Podcast") {
+                  try {
+                    finalUrl = window.AndroidBridge.cacheTrackOnce(track.id, finalUrl);
+                  } catch (e) {}
+                }
+
+                if (window.AndroidBridge && window.AndroidBridge.playUrl && finalUrl) {
+                  window.AndroidBridge.playUrl(finalUrl);
+                }
+              }
+
+              function nextTrack() {
+                if (!state.tracks.length) return;
+                if (state.shuffle && state.tracks.length > 1) {
+                  let nextIdx = Math.floor(Math.random() * state.tracks.length);
+                  if (nextIdx === state.currentIndex) {
+                    nextIdx = (state.currentIndex + 1) % state.tracks.length;
+                  }
+                  playTrackAt(nextIdx);
+                } else {
+                  playTrackAt((state.currentIndex + 1) % state.tracks.length);
+                }
+              }
+
+              function prevTrack() {
+                if (!state.tracks.length) return;
+                playTrackAt((state.currentIndex - 1 + state.tracks.length) % state.tracks.length);
+              }
+
+              window.onNativeStateChange = function(isPlaying) {
+                document.getElementById("npStatus").textContent = isPlaying ? "Playing" : "Paused";
+              };
+
+              window.onNativeTrackEnded = function() {
+                nextTrack();
+              };
+
+              setInterval(() => {
+                if (!state.inNowPlaying) return;
+                if (window.AndroidBridge && window.AndroidBridge.getPlaybackStatus) {
+                  try {
+                    const st = JSON.parse(window.AndroidBridge.getPlaybackStatus());
+                    document.getElementById("curTime").textContent = fmt(st.position);
+                    document.getElementById("durTime").textContent = fmt(st.duration);
+                    const slider = document.getElementById("seekSlider");
+                    slider.max = st.duration || 100;
+                    slider.value = st.position || 0;
+                    document.getElementById("npStatus").textContent = st.playing ? "Playing" : "Paused";
+                  } catch (e) {}
+                }
+              }, 700);
+
+              document.getElementById("tabSongs").onclick = () => switchTab("songs");
+              document.getElementById("tabPodcasts").onclick = () => switchTab("podcasts");
+              document.getElementById("tabQuran").onclick = () => switchTab("quran");
+              document.getElementById("searchBtn").onclick = performSearch;
+              document.getElementById("queryInput").addEventListener("keydown", e => {
+                if (e.key === "Enter") performSearch();
+              });
+              document.getElementById("localBtn").onclick = loadLocal;
+              document.getElementById("shuffleBtn").onclick = () => {
+                state.shuffle = !state.shuffle;
+                updateShuffleUI();
+              };
+              document.getElementById("seekSlider").onchange = e => {
+                if (window.AndroidBridge && window.AndroidBridge.seekTo) {
+                  window.AndroidBridge.seekTo(Number(e.target.value));
+                }
+              };
+              document.getElementById("playBtn").onclick = () => {
+                if (window.AndroidBridge && window.AndroidBridge.togglePlayPause) {
+                  window.AndroidBridge.togglePlayPause();
+                }
+              };
+              document.getElementById("centerBtn").onclick = () => {
+                if (!state.inNowPlaying && state.tracks.length) {
+                  playTrackAt(state.currentIndex >= 0 ? state.currentIndex : 0);
+                } else if (window.AndroidBridge && window.AndroidBridge.togglePlayPause) {
+                  window.AndroidBridge.togglePlayPause();
+                }
+              };
+              document.getElementById("nextBtn").onclick = nextTrack;
+              document.getElementById("prevBtn").onclick = prevTrack;
+              document.getElementById("menuBtn").onclick = () => setNowPlayingMode(false);
+
+              updateShuffleUI();
+              renderList(state.tracks);
+            </script>
+          </body>
+          </html>
+          EOF
+
+          gradle assembleDebug --no-daemon
+
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: iPod-Classic-APK
+          name: iPodClassic-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
