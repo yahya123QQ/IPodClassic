@@ -19,15 +19,23 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          cmdline-version: '11.0'
-          packages: |
-            platform-tools
-            platforms;android-34
-            build-tools;34.0.0
-          accept-android-sdk-licenses: true
+      - name: Install Android SDK Manually
+        run: |
+          set -e
+          SDK_ROOT="$HOME/android-sdk"
+          mkdir -p "$SDK_ROOT/cmdline-tools"
+          curl -fsSL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o /tmp/cmdline-tools.zip
+          unzip -q /tmp/cmdline-tools.zip -d "$SDK_ROOT/cmdline-tools"
+          mv "$SDK_ROOT/cmdline-tools/cmdline-tools" "$SDK_ROOT/cmdline-tools/latest"
+
+          export PATH="$SDK_ROOT/cmdline-tools/latest/bin:$SDK_ROOT/platform-tools:$PATH"
+          yes | sdkmanager --sdk_root="$SDK_ROOT" --licenses > /dev/null || true
+          sdkmanager --sdk_root="$SDK_ROOT" --no_https "platform-tools" "platforms;android-34" "build-tools;34.0.0" || \
+          sdkmanager --sdk_root="$SDK_ROOT" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$SDK_ROOT/platform-tools:$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
 
       - name: Create Android project with iPod Classic UI & Playback Engine
         run: |
@@ -980,7 +988,8 @@ jobs:
           </html>
           EOF
 
-          gradle assembleDebug --no-daemon
+          gradle wrapper --gradle-version 8.4 --distribution-type bin --no-daemon
+          ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
