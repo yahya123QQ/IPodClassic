@@ -197,40 +197,27 @@ jobs:
            if(e.target.id=='shuf-btn'){shuf=!shuf;A.setShuffle(shuf);optSave();drawNP();toast(shuf?'Shuffle On':'Shuffle Off');return}
            A.toggle()},false);
 
-          var POD_SEC=300;
-          function isPodcast(t){
-           if(!t)return false;
-           var d=Number(t.d||0);
-           if(d>0)return d>POD_SEC;
-           return String(t.b||'').toLowerCase().indexOf('podcast')>=0;
-          }
-          function getSongsList(){return lib.filter(function(t){return !isPodcast(t)})}
-          function getPodcastsList(){return lib.filter(function(t){return isPodcast(t)})}
           function src(p){return p.indexOf('/storage/')==0&&p.indexOf('/storage/emulated')!=0&&p.indexOf('/storage/self')!=0?'SD card':'Phone'}
           function mqList(a){mqs=a.filter(Boolean).map(function(e){e.scrollLeft=0;return{e:e,p:0,d:1,w:12}})}
           function clean(t){t.a=(!t.a||t.a=='<unknown>')?'Unknown':t.a;t.b=(!t.b||t.b=='<unknown>')?'Unknown':t.b;t.t=t.t||'Untitled';t.d=Number(t.d||0);return t}
           function mainMenu(){return{title:'iPod',items:[
            {t:'Now Playing',f:function(){if(cur>=0)push({title:'Now Playing',np:1});else toast('Nothing playing')}},
            {t:'Music',s:'>',f:function(){push(musicMenu())}},
-           {t:'Podcasts (>5m)',s:getPodcastsList().length,f:function(){push(songs(getPodcastsList(),'Podcasts',true,null,true))}},
            {t:'Playlists',s:'>',f:function(){push(plMenu())}},
            {t:'Online (Wi-Fi)',s:'>',f:function(){push(onlineMenu())}},
-           {t:'Camera',s:'cam',f:function(){A.openCamera()}},
            {t:'Settings',s:'>',f:function(){push(setMenu())}},
            {t:'Exit',s:'x',f:function(){A.exit()}}]}}
-          function musicMenu(){var sg=getSongsList(),pd=getPodcastsList();return{title:'Music',items:[
-           {t:'Songs (<5m)',s:sg.length,f:function(){push(songs(sg,'Songs (<5m)',true,null,true))}},
-           {t:'Podcasts (>5m)',s:pd.length,f:function(){push(songs(pd,'Podcasts (>5m)',true,null,true))}},
-           {t:'All Audio',s:lib.length,f:function(){push(songs(lib,'All Audio',true,null,true))}},
+          function musicMenu(){return{title:'Music',items:[
+           {t:'All Songs',s:lib.length,f:function(){push(songs(lib,'Songs',true,null,true))}},
            {t:'Artists',s:'>',f:artists},
            {t:'Albums',s:'>',f:albums},
            {t:'Recently Added',s:'>',f:function(){push(songs(lib.slice().sort(function(a,b){return(b.da||0)-(a.da||0)}).slice(0,50),'Recently Added',true,null,true))}},
-           {t:'Search',s:'Library',f:function(){askQ('loc','Search songs & podcasts...')}},
-           {t:'Where are my songs?',f:function(){toast('Songs <5m & Podcasts >5m in Music/iPod & phone')}},
-           {t:'Shuffle All',f:function(){var l=sg.length?sg.slice():lib.slice();l.sort(function(){return Math.random()-.5});if(l.length)play(l,0)}},
+           {t:'Search',s:'Library',f:function(){askQ('loc','Search your songs...')}},
+           {t:'Where are my songs?',f:function(){toast('Audio files on phone + SD card, and your Music/iPod downloads')}},
+           {t:'Shuffle All',f:function(){var l=lib.slice().sort(function(){return Math.random()-.5});if(l.length)play(l,0)}},
            {t:'Shuffle',s:shuf?'On':'Off',f:function(){shuf=!shuf;A.setShuffle(shuf);optSave();refresh(musicMenu)}},
            {t:'Repeat',s:['Off','All','One'][rep],f:function(){rep=(rep+1)%3;A.setRepeat(rep);optSave();refresh(musicMenu)}}]}}
-          function songs(list,title,addable,plname,withArt){return{title:title,empty:'No items - copy MP3s or use Online',items:list.map(function(t,i){return{t:t.t,s:t.a,f:function(){play(list,i)},tr:t,showImg:!!withArt}}),
+          function songs(list,title,addable,plname,withArt){return{title:title,empty:'No songs - copy MP3s or use Online',items:list.map(function(t,i){return{t:t.t,s:t.a,f:function(){play(list,i)},tr:t,showImg:!!withArt}}),
            ctx:function(it){if(plname){var k=pls[plname].indexOf(it.tr.p);if(k>=0){pls[plname].splice(k,1);savePl();toast('Removed');S.pop();push(songs(plTracks(plname),title,false,plname,!!withArt))}}
             else if(addable)push(actMenu(it.tr))}}}
           function actMenu(tr){var it=[{t:'Add to playlist',f:function(){push(addMenu(tr))}}];
@@ -257,10 +244,9 @@ jobs:
            {t:'Search Podcasts',f:function(){askQ('pod','Podcast name...')}},
            {t:'Wi-Fi On/Off',f:function(){A.toggleWifi();toast('Toggling Wi-Fi...');setTimeout(upd,2500)}}]}}
           function setMenu(){return{title:'Settings',items:[
-           {t:'Camera',s:'Open',f:function(){A.openCamera()}},
            {t:'Wi-Fi On/Off',f:function(){A.toggleWifi();setTimeout(upd,2500)}},
            {t:'Sleep timer',s:slp?slp+' min':'Off',f:function(){var o=[0,15,30,60];slp=o[(o.indexOf(slp)+1)%4];A.sleep(slp);refresh(setMenu);toast(slp?'Music stops in '+slp+' min':'Sleep timer off')}},
-           {t:'Rescan Library',f:function(){artCache={};loadLib();toast(lib.length+' items')}},
+           {t:'Rescan Library',f:function(){artCache={};loadLib();toast(lib.length+' songs')}},
            {t:'Close background apps',f:function(){A.saveBattery()}},
            {t:'Sound test',f:function(){A.beep();toast('Beep? If silent, raise media volume')}}]}}
 
@@ -279,13 +265,8 @@ jobs:
           function onDl(id,p,path){var t=dls[id];if(!t)return;
            if(p==-1){toast('Download failed');delete dlDone[trackKey(t)];saveDlDone();delete dls[id];draw()}
            else if(p==101){
-            var realDur=Number(t.d||0);
-            try{if(typeof A.duration==='function'){var nd=Number(A.duration(path)||0);if(nd>0)realDur=nd}}catch(e){}
-            var cat=realDur>POD_SEC?'Podcasts':'Downloads';
-            var item=clean({p:path,t:t.t,a:t.a,b:cat,d:realDur});
-            lib.push(item);dlDone[trackKey(t)]=1;saveDlDone();
-            toast('Saved in '+(realDur>POD_SEC?'Podcasts (>5m)':'Songs (<5m)')+': '+t.t);
-            delete dls[id];if(cs().np)drawNP();else draw()
+            lib.push(clean({p:path,t:t.t,a:t.a,b:'Downloads',d:t.d}));dlDone[trackKey(t)]=1;saveDlDone();
+            toast('Saved: '+t.t);delete dls[id];if(cs().np)drawNP();else draw()
            }
            else toast('Downloading '+p+'%')}
           function trackScreen(T,title){return{title:title,empty:'No results',items:T.map(function(t,i){return{t:t.t,s:t.a,f:function(){play(T,i)},tr:t,dl:isDownloaded(t)?0:1,img:t.img,showImg:true}}),
@@ -375,9 +356,8 @@ jobs:
             push({title:'Podcasts',items:d.filter(function(x){return x.feedUrl}).map(function(x){return{t:x.collectionName,s:x.artistName,img:x.artworkUrl60,f:function(){episodes(x)}}})})})}
           function episodes(x){toast('Loading episodes...');get(x.feedUrl,function(r){if(!r){toast('Feed failed');return}
            var parts=r.split('<item'),T=[],i;
-           for(i=1;i<parts.length&&T.length<30;i++){var p=parts[i],u=/<enclosure[^>]*url=["']([^"']+)["']/.exec(p),t=/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/.exec(p),durM=/<itunes:duration>([^<]+)<\/itunes:duration>/.exec(p);
-            var sec=0;if(durM){var dp=durM[1].trim().split(':');if(dp.length==3)sec=(+dp[0])*3600+(+dp[1])*60+(+dp[2]);else if(dp.length==2)sec=(+dp[0])*60+(+dp[1]);else sec=+dp[0]||0}
-            if(u)T.push({p:u[1].replace(/&amp;/g,'&'),t:t?t[1].trim():'Episode',a:x.collectionName,b:'Podcast',d:sec||600,img:x.artworkUrl100})}
+           for(i=1;i<parts.length&&T.length<30;i++){var p=parts[i],u=/<enclosure[^>]*url=["']([^"']+)["']/.exec(p),t=/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/.exec(p);
+            if(u)T.push({p:u[1].replace(/&amp;/g,'&'),t:t?t[1].trim():'Episode',a:x.collectionName,b:'Podcast',d:0,img:x.artworkUrl100})}
            if(!T.length){toast('No episodes');return}push(trackScreen(T,'Episodes'));toast('Tap = play, hold center = download')})}
           $('qi').onkeydown=function(e){if(e.keyCode==13){var q=this.value;this.blur();$('qb').style.display='none';if(q)doSearch(q)}};
 
@@ -474,17 +454,6 @@ jobs:
                       }
                   } catch (Exception e) {}
                   return r.toString();
-              }
-
-              @JavascriptInterface public long duration(String path) {
-                  if (path == null || path.isEmpty()) return 0;
-                  MediaMetadataRetriever m = new MediaMetadataRetriever();
-                  try {
-                      m.setDataSource(path);
-                      String d = m.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
-                      return d != null ? Long.parseLong(d) / 1000L : 0L;
-                  } catch (Exception e) { return 0L; }
-                  finally { try { m.release(); } catch (Exception e) {} }
               }
 
               @JavascriptInterface public String art(String p) {
@@ -593,20 +562,6 @@ jobs:
               @JavascriptInterface public void toggleWifi() {
                   WifiManager wm = (WifiManager) a.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
                   wm.setWifiEnabled(!wm.isWifiEnabled());
-              }
-              @JavascriptInterface public void openCamera() {
-                  try {
-                      Intent ci = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                      ci.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                      a.startActivity(ci);
-                  } catch (Exception e) {
-                      try {
-                          Intent pk = a.getPackageManager().getLaunchIntentForPackage("com.android.camera");
-                          if (pk == null) pk = a.getPackageManager().getLaunchIntentForPackage("com.android.camera2");
-                          if (pk != null) { pk.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); a.startActivity(pk); }
-                          else js("toast('Camera unavailable')");
-                      } catch (Exception ex) { js("toast('Camera unavailable')"); }
-                  }
               }
               @JavascriptInterface public void openWifi() { open(Settings.ACTION_WIFI_SETTINGS); }
               @JavascriptInterface public void openSettings() { open(Settings.ACTION_SETTINGS); }
@@ -1021,3 +976,4 @@ jobs:
         with:
           name: iPod-APK
           path: app/build/outputs/apk/debug/app-debug.apk
+        
