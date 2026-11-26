@@ -17,7 +17,7 @@ jobs:
               defaultConfig {
                   applicationId "com.ipod.classic"
                   minSdkVersion 21
-                  targetSdkVersion 22   // 22 = no runtime-permission prompts on Android 5.1.1
+                  targetSdkVersion 22
                   versionCode 1
                   versionName "1.0"
               }
@@ -124,9 +124,8 @@ jobs:
             <div class="lb" style="bottom:7%;left:0;width:100%;text-align:center">&gt;||</div><div id="cb"></div></div>
           </div>
           <script>
-          // ES5 only (old WebView on Android 5.1). Avoid names that clash with window.* (top, scroll, ...)
           var $=function(i){return document.getElementById(i)};
-          var S=[],lib=[],pls={},Q=[],cur=-1,st={p:0,d:0,pl:false,i:-1},ROWS=7,H=null,cbs={},cid=0,dls={},dlDone={},did=0,ttm=null,qmode='aud',npm='vol',shuf=false,rep=0,idle=null,dimmed=false,mqs=[],lastE=0,wasL=false,pausedApp=false,artCache={};
+          var S=[],lib=[],pls={},Q=[],cur=-1,st={p:0,d:0,pl:false,i:-1},ROWS=7,H=null,cbs={},cid=0,dls={},dlDone={},did=0,ttm=null,qmode='all',npm='vol',shuf=false,rep=0,idle=null,dimmed=false,mqs=[],lastE=0,wasL=false,pausedApp=false,artCache={};
           try{var o=JSON.parse(localStorage.getItem('opt')||'{}');shuf=!!o.s;rep=o.r||0}catch(e){}
           try{dlDone=JSON.parse(localStorage.getItem('dlDone')||'{}')||{}}catch(e){}
           function saveDlDone(){try{localStorage.setItem('dlDone',JSON.stringify(dlDone))}catch(e){}}
@@ -144,7 +143,6 @@ jobs:
           function push(sc){sc.sel=0;sc.off=0;S.push(sc);draw()}
           function back(){if(cs().title=='Upload'){A.stopServer();loadLib()}if($('qb').style.display=='block'){$('qb').style.display='none';$('qi').blur();return}if(S.length>1){S.pop();draw()}}
 
-          // ---- lightweight cached artwork helper (saves battery on lists) ----
           function getThumb(it){
            if(!it)return '';
            if(it.img)return it.img;
@@ -163,7 +161,6 @@ jobs:
            return '<span class="th-ph">&#9835;</span>';
           }
 
-          // ---- drawing ----
           function draw(){var s=cs();$('title').textContent=s.title;
            if(s.np){$('list').style.display='none';$('np').style.display='block';drawNP();return}
            $('np').style.display='none';$('list').style.display='block';
@@ -182,13 +179,11 @@ jobs:
            if(t.img)im=t.img;else{im=getThumb({tr:t})}
            $('art').style.backgroundImage=im?'url('+im+')':'none';$('art').innerHTML=im?'':'&#9835;';mqList([$('nt'),$('na')])}
 
-          // ---- navigation ----
           function mv(d){var s=cs();
            if(s.np){if(npm=='vol'){A.vol(d);poll()}else{st.p=Math.max(0,st.p+d*5000);A.seek(st.p)}return}
            var n=s.items.length;if(!n)return;s.sel=Math.max(0,Math.min(n-1,s.sel+d));draw()}
           function sel(){var s=cs();if(s.np){npm=npm=='vol'?'seek':'vol';poll();return}var it=s.items[s.sel];if(it&&it.f)it.f(it)}
           function ctx(){var s=cs();var it=s.items[s.sel];if(it&&s.ctx)s.ctx(it)}
-          // tap / swipe directly on the screen list
           var ly=0,lmoved=0,lacc=0;
           $('list').addEventListener('touchstart',function(e){ly=e.touches[0].clientY;lmoved=0;lacc=0},false);
           $('list').addEventListener('touchmove',function(e){var y=e.touches[0].clientY;lacc+=ly-y;ly=y;lmoved+=Math.abs(lacc);
@@ -202,7 +197,6 @@ jobs:
            if(e.target.id=='shuf-btn'){shuf=!shuf;A.setShuffle(shuf);optSave();drawNP();toast(shuf?'Shuffle On':'Shuffle Off');return}
            A.toggle()},false);
 
-          // ---- screens & auto-categorization (Songs < 5 min; Podcasts > 5 min) ----
           var POD_SEC=300;
           function isPodcast(t){
            if(!t)return false;
@@ -221,6 +215,7 @@ jobs:
            {t:'Podcasts (>5m)',s:getPodcastsList().length,f:function(){push(songs(getPodcastsList(),'Podcasts',true,null,true))}},
            {t:'Playlists',s:'>',f:function(){push(plMenu())}},
            {t:'Online (Wi-Fi)',s:'>',f:function(){push(onlineMenu())}},
+           {t:'Camera',s:'cam',f:function(){A.openCamera()}},
            {t:'Settings',s:'>',f:function(){push(setMenu())}},
            {t:'Exit',s:'x',f:function(){A.exit()}}]}}
           function musicMenu(){var sg=getSongsList(),pd=getPodcastsList();return{title:'Music',items:[
@@ -255,19 +250,20 @@ jobs:
            return{title:'Add to...',empty:'Create a playlist first',items:items,sel:0,off:0}}
           function askQ(mode,ph){qmode=mode;$('qi').placeholder=ph;$('qb').style.display='block';$('sg').innerHTML='';$('qi').value='';$('qi').focus()}
           function onlineMenu(){return{title:'Online',items:[
+           {t:'Search All Music',s:'Multi',f:function(){askQ('all','Song, artist or audio...')}},
            {t:'Search Music',s:'Audius',f:function(){askQ('aud','Song or artist...')}},
            {t:'Free Music (full songs)',s:'Archive',f:function(){askQ('ia','Artist or song...')}},
            {t:'Upload from PC',s:'Wi-Fi',f:function(){var u=A.startServer();if(!u){toast('Connect to Wi-Fi first');return}push({title:'Upload',items:[{t:'Open on your PC:'},{t:u},{t:'Stop & close',f:function(){back()}}]})}},
            {t:'Search Podcasts',f:function(){askQ('pod','Podcast name...')}},
            {t:'Wi-Fi On/Off',f:function(){A.toggleWifi();toast('Toggling Wi-Fi...');setTimeout(upd,2500)}}]}}
           function setMenu(){return{title:'Settings',items:[
+           {t:'Camera',s:'Open',f:function(){A.openCamera()}},
            {t:'Wi-Fi On/Off',f:function(){A.toggleWifi();setTimeout(upd,2500)}},
            {t:'Sleep timer',s:slp?slp+' min':'Off',f:function(){var o=[0,15,30,60];slp=o[(o.indexOf(slp)+1)%4];A.sleep(slp);refresh(setMenu);toast(slp?'Music stops in '+slp+' min':'Sleep timer off')}},
            {t:'Rescan Library',f:function(){artCache={};loadLib();toast(lib.length+' items')}},
            {t:'Close background apps',f:function(){A.saveBattery()}},
            {t:'Sound test',f:function(){A.beep();toast('Beep? If silent, raise media volume')}}]}}
 
-          // ---- playback ----
           function play(list,i){Q=list.slice();cur=i;A.playQueue(JSON.stringify(Q.map(function(t){return t.p})),i);
            if(!cs().np)push({title:'Now Playing',np:1});else drawNP()}
           function poll(){if(pausedApp)return;if(!cs().np)return;var s;try{s=JSON.parse(A.state())}catch(e){return}st=s;
@@ -278,7 +274,6 @@ jobs:
             try{var v=A.volume().split(',');$('vf').style.width=(v[0]*100/v[1])+'%'}catch(e){}
             $('md').textContent=(npm=='vol'?'Wheel: Volume (center = scrub)':'Wheel: Scrub (center = volume)')+(s.s?' | Shuffle':'')+(s.r==1?' | Repeat all':s.r==2?' | Repeat one':'')}}
 
-          // ---- online: Audius music + Archive + iTunes podcasts ----
           function get(u,f){cbs[++cid]=f;A.get(u,cid)}
           function onHttp(id,ok,b){var f=cbs[id];delete cbs[id];if(f)f(ok?b:null)}
           function onDl(id,p,path){var t=dls[id];if(!t)return;
@@ -304,21 +299,64 @@ jobs:
            var id=++did;dls[id]=t;toast('Downloading once...');A.download(t.p,t.t+' - '+t.a,id,t.img||'')}
           function host(f){if(H)return f(H);get('https://api.audius.co',function(r){try{H=JSON.parse(r).data[0]}catch(e){H='https://discoveryprovider.audius.co'}f(H)})}
           function byPop(a,b){return(b.play_count||0)-(a.play_count||0)}
-          function audSearch(q,fixed){toast('Searching...');host(function(h){
-           get(h+'/v1/tracks/search?query='+encodeURIComponent(q)+'&limit=30&app_name=IPODCLASSIC',function(r){
-            var d;try{d=JSON.parse(r).data}catch(e){}if(!d){toast('Search failed - check Wi-Fi');return}
-            if(!d.length){if(fixed){toast('No results');return}
-             get('https://itunes.apple.com/search?media=music&entity=song&limit=1&term='+encodeURIComponent(q),function(r2){
-              try{var x=JSON.parse(r2).results[0];if(x){toast('Showing results for: '+x.trackName);audSearch(x.trackName+' '+x.artistName,true);return}}catch(e){}toast('No results')});return}
-            d.sort(byPop);
-            var T=d.map(function(x){return{p:h+'/v1/tracks/'+x.id+'/stream?app_name=IPODCLASSIC',t:x.title,a:x.user?x.user.name:'',b:'Audius',d:x.duration||0,img:x.artwork?x.artwork['150x150']:''}});
-            push(trackScreen(T,'Top results'));toast('Most popular first')})})}
+          function fetchAudList(q,cb){
+           host(function(h){
+            get(h+'/v1/tracks/search?query='+encodeURIComponent(q)+'&limit=25&app_name=IPODCLASSIC',function(r){
+             var list=[];
+             try{var d=JSON.parse(r).data;if(d&&d.length){d.sort(byPop);list=d.map(function(x){return{p:h+'/v1/tracks/'+x.id+'/stream?app_name=IPODCLASSIC',t:x.title,a:x.user?x.user.name:'',b:'Audius',d:x.duration||0,img:x.artwork?x.artwork['150x150']:''}})}}catch(e){}
+             cb(list);
+            });
+           });
+          }
+          function fetchIaList(q,cb){
+           get('https://archive.org/advancedsearch.php?q='+encodeURIComponent('('+q+') AND mediatype:audio AND format:MP3')+'&fl[]=identifier&fl[]=title&fl[]=creator&sort[]=downloads+desc&rows=12&output=json',function(r){
+            var out=[];
+            try{
+             var docs=JSON.parse(r).response.docs||[];
+             var i,maxD=Math.min(3,docs.length);
+             if(!maxD){cb([]);return}
+             var done=0;
+             for(i=0;i<maxD;i++)(function(doc){
+              get('https://archive.org/metadata/'+doc.identifier,function(mr){
+               try{
+                var m=JSON.parse(mr),a=Array.isArray(doc.creator)?doc.creator[0]:(doc.creator||'');
+                (m.files||[]).forEach(function(f){
+                 if(!/\.mp3$/i.test(f.name)||f.format=='Sample'||out.length>=18)return;
+                 out.push({p:'https://archive.org/download/'+doc.identifier+'/'+f.name.split('/').map(encodeURIComponent).join('/'),t:f.title||f.name.replace(/\.mp3$/i,''),a:f.artist||f.creator||a,b:'Archive',d:parseFloat(f.length)||0,img:''});
+                });
+               }catch(e){}
+               if(++done==maxD)cb(out);
+              });
+             })(docs[i]);
+            }catch(e){cb([])}
+           });
+          }
+          function allMusicSearch(q){
+           toast('Searching multiple sources...');
+           var combined=[],done=0;
+           function finishPart(arr){
+            for(var i=0;i<arr.length;i++)combined.push(arr[i]);
+            if(++done==2){
+             if(!combined.length){toast('No results - check Wi-Fi');return}
+             push(trackScreen(combined,'All Music Results'));
+             toast('Found '+combined.length+' tracks');
+            }
+           }
+           fetchAudList(q,finishPart);
+           fetchIaList(q,finishPart);
+          }
+          function audSearch(q,fixed){toast('Searching...');fetchAudList(q,function(T){
+           if(T.length){push(trackScreen(T,'Top results'));toast('Most popular first');return}
+           if(fixed){toast('No results');return}
+           get('https://itunes.apple.com/search?media=music&entity=song&limit=1&term='+encodeURIComponent(q),function(r2){
+            try{var x=JSON.parse(r2).results[0];if(x){toast('Showing results for: '+x.trackName);audSearch(x.trackName+' '+x.artistName,true);return}}catch(e){}toast('No results')});
+          })}
           var sgt=null,sgq=[];
           function showSg(it){sgq=it.map(function(x){return x.q});$('sg').innerHTML=it.map(function(x,i){return'<div class="g" data-k="'+i+'">'+(x.img?'<img class="th" src="'+x.img+'">':'<span class="th-ph">&#9835;</span>')+'<div class="tt">'+esc(x.t)+'</div></div>'}).join('')}
           function suggest(q){if(qmode=='ia')return;if(qmode=='loc'){showSg(locMatch(q).slice(0,6).map(function(t){return{t:t.t+' - '+t.a,q:t.t}}));return}var out=function(it){showSg(it)};
            if(qmode=='pod'){get('https://itunes.apple.com/search?media=podcast&limit=6&term='+encodeURIComponent(q),function(r){try{out(JSON.parse(r).results.map(function(x){return{t:x.collectionName,q:x.collectionName,img:x.artworkUrl60}}))}catch(e){}});return}
            host(function(h){get(h+'/v1/tracks/search?query='+encodeURIComponent(q)+'&limit=12&app_name=IPODCLASSIC',function(r){try{out(JSON.parse(r).data.sort(byPop).slice(0,6).map(function(x){return{t:x.title+' - '+(x.user?x.user.name:''),q:x.title,img:x.artwork?x.artwork['150x150']:''}}))}catch(e){}})})}
-          function doSearch(q){$('sg').innerHTML='';if(qmode=='pod')podSearch(q);else if(qmode=='ia')iaSearch(q);else if(qmode=='loc')push(songs(locMatch(q),'Results',true,null,true));else audSearch(q)}
+          function doSearch(q){$('sg').innerHTML='';if(qmode=='pod')podSearch(q);else if(qmode=='ia')iaSearch(q);else if(qmode=='loc')push(songs(locMatch(q),'Results',true,null,true));else if(qmode=='all')allMusicSearch(q);else audSearch(q)}
           function iaSearch(q){toast('Searching...');get('https://archive.org/advancedsearch.php?q='+encodeURIComponent('('+q+') AND mediatype:audio AND format:MP3')+'&fl[]=identifier&fl[]=title&fl[]=creator&sort[]=downloads+desc&rows=25&output=json',function(r){
            var d;try{d=JSON.parse(r).response.docs}catch(e){}if(!d||!d.length){toast('No results - check Wi-Fi');return}
            push({title:'Free Music',items:d.map(function(x){return{t:x.title,s:Array.isArray(x.creator)?x.creator[0]:(x.creator||''),f:function(){iaFiles(x)}}})})})}
@@ -343,7 +381,6 @@ jobs:
            if(!T.length){toast('No episodes');return}push(trackScreen(T,'Episodes'));toast('Tap = play, hold center = download')})}
           $('qi').onkeydown=function(e){if(e.keyCode==13){var q=this.value;this.blur();$('qb').style.display='none';if(q)doSearch(q)}};
 
-          // ---- click wheel ----
           var W=$('wheel'),ang=0,acc=0,moved=0,tid=null,lng=0,zone=false;
           function pt(e){var t=(e.touches&&e.touches[0])||e.changedTouches[0],r=W.getBoundingClientRect(),
            x=t.clientX-(r.left+r.width/2),y=t.clientY-(r.top+r.height/2);
@@ -359,7 +396,6 @@ jobs:
            if(moved<14){var a=ang;
             if(a>-135&&a<-45)back();else if(a>=-45&&a<=45)A.next();else if(a>45&&a<135)A.toggle();else A.prev()}},false);
 
-          // ---- status & init ----
           function upd(){if(pausedApp)return;var d=new Date();$('clk').textContent=d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes();
            try{var s=JSON.parse(A.status());$('pc').textContent=s.b+'%'+(s.c?' +':'');$('bf').style.width=s.b+'%';$('bf').style.background=s.b<20?'#e44':'#4c4';
             $('wfi').textContent=s.w?(s.n?'Wi-Fi connected':'Wi-Fi searching'):'Wi-Fi off'}catch(e){}}
@@ -413,14 +449,12 @@ jobs:
           import javax.net.ssl.*;
           import java.security.cert.X509Certificate;
 
-          /** JS <-> Java bridge, exposed to the page as window.A */
           public class Bridge {
               final Activity a; final WebView w;
               Bridge(Activity a, WebView w) { this.a = a; this.w = w; }
 
               void js(final String s) { a.runOnUiThread(() -> w.evaluateJavascript(s, null)); }
 
-              // ---------- library ----------
               @JavascriptInterface public String library() {
                   JSONArray r = new JSONArray();
                   try {
@@ -459,7 +493,7 @@ jobs:
                   try {
                       m.setDataSource(p);
                       byte[] b = m.getEmbeddedPicture();
-                      if (b == null) {                       // downloaded songs keep their cover in a sibling .art file
+                      if (b == null) {
                           File af = new File(p.replaceAll("\\.[^./]+$", "") + ".art");
                           if (!af.exists()) return "";
                           FileInputStream fi = new FileInputStream(af); ByteArrayOutputStream bo = new ByteArrayOutputStream();
@@ -476,7 +510,6 @@ jobs:
                   } catch (Exception e) { return ""; } finally { try { m.release(); } catch (Exception e) {} }
               }
 
-              // ---------- playback ----------
               @JavascriptInterface public void playQueue(String json, int start) {
                   try { Player.setQueue(a, new JSONArray(json), start); } catch (Exception e) {}
               }
@@ -496,19 +529,18 @@ jobs:
                   AudioManager m = (AudioManager) a.getSystemService(Context.AUDIO_SERVICE);
                   return m.getStreamVolume(AudioManager.STREAM_MUSIC) + "," + m.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
               }
-              @JavascriptInterface public void dim(final boolean on) {      // battery saver: dim the screen when idle
+              @JavascriptInterface public void dim(final boolean on) {
                   a.runOnUiThread(() -> { WindowManager.LayoutParams lp = a.getWindow().getAttributes();
                       lp.screenBrightness = on ? 0.03f : -1f; a.getWindow().setAttributes(lp); });
               }
-              @JavascriptInterface public boolean del(String path) {       // only files this app downloaded
+              @JavascriptInterface public boolean del(String path) {
                   if (path == null || !path.contains("/Music/iPod/")) return false;
                   boolean ok = new File(path).delete();
                   if (ok) MediaScannerConnection.scanFile(a, new String[]{path}, null, null);
                   return ok;
               }
 
-              // ---------- exit / battery / sound test ----------
-              @JavascriptInterface public void exit() {       // stop music, hand the phone back to its normal launcher
+              @JavascriptInterface public void exit() {
                   Player.release(); stopServer();
                   a.runOnUiThread(() -> {
                       try {
@@ -528,7 +560,6 @@ jobs:
               }
               @JavascriptInterface public void beep() { try { new ToneGenerator(AudioManager.STREAM_MUSIC, 100).startTone(ToneGenerator.TONE_PROP_BEEP2, 500); } catch (Exception e) {} }
               @JavascriptInterface public void saveBattery() { new Thread(() -> { int n = killBg(); js("toast('Closed " + n + " background apps')"); }).start(); }
-              /** Ends background processes of user-installed apps (Android lets them restart later; system apps are never touched). */
               int killBg() {
                   int n = 0;
                   try {
@@ -551,7 +582,6 @@ jobs:
                   return n;
               }
 
-              // ---------- status / wifi / system ----------
               @JavascriptInterface public String status() {
                   Intent i = a.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
                   int lv = i.getIntExtra("level", 0) * 100 / Math.max(1, i.getIntExtra("scale", 100));
@@ -564,14 +594,24 @@ jobs:
                   WifiManager wm = (WifiManager) a.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
                   wm.setWifiEnabled(!wm.isWifiEnabled());
               }
+              @JavascriptInterface public void openCamera() {
+                  try {
+                      Intent ci = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                      ci.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                      a.startActivity(ci);
+                  } catch (Exception e) {
+                      try {
+                          Intent pk = a.getPackageManager().getLaunchIntentForPackage("com.android.camera");
+                          if (pk == null) pk = a.getPackageManager().getLaunchIntentForPackage("com.android.camera2");
+                          if (pk != null) { pk.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); a.startActivity(pk); }
+                          else js("toast('Camera unavailable')");
+                      } catch (Exception ex) { js("toast('Camera unavailable')"); }
+                  }
+              }
               @JavascriptInterface public void openWifi() { open(Settings.ACTION_WIFI_SETTINGS); }
               @JavascriptInterface public void openSettings() { open(Settings.ACTION_SETTINGS); }
               void open(String act) { try { a.startActivity(new Intent(act).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); } catch (Exception e) {} }
 
-
-              // ---- HTTP helper: follows redirects (even http<->https); old Android 5 often rejects
-              // newer HTTPS certificates, so on SSL failure it retries once without chain validation
-              // (public music/podcast data only - no logins or personal data are ever sent).
               static SSLSocketFactory LAX;
               static SSLSocketFactory lax() {
                   if (LAX == null) try {
@@ -606,7 +646,6 @@ jobs:
                   throw new IOException("redirects");
               }
 
-              // ---------- network ----------
               @JavascriptInterface public void get(final String url, final int id) {
                   new Thread(() -> {
                       try {
@@ -648,12 +687,10 @@ jobs:
                   }).start();
               }
 
-              // ---------- sleep timer ----------
               static final android.os.Handler SH = new android.os.Handler(android.os.Looper.getMainLooper());
               static final Runnable SR = () -> Player.pause();
               @JavascriptInterface public void sleep(int min) { SH.removeCallbacks(SR); if (min > 0) SH.postDelayed(SR, min * 60000L); }
 
-              // ---------- Wi-Fi upload server (runs only while the Upload screen is open) ----------
               static java.net.ServerSocket srv;
               @JavascriptInterface public synchronized String startServer() {
                   try {
@@ -714,7 +751,6 @@ jobs:
           import android.media.AudioManager;
           import android.os.IBinder;
 
-          /** Foreground service so Android doesn't kill the process during playback. */
           public class KeepAliveService extends Service {
               static void start(Context c) { c.startService(new Intent(c, KeepAliveService.class)); }
               static void stop(Context c) { if (c != null) c.stopService(new Intent(c, KeepAliveService.class)); }
@@ -761,22 +797,21 @@ jobs:
 
               @Override protected void onCreate(Bundle b) {
                   super.onCreate(b);
-                  setVolumeControlStream(AudioManager.STREAM_MUSIC);   // volume keys always control music
+                  setVolumeControlStream(AudioManager.STREAM_MUSIC);
                   w = new WebView(this);
                   w.setBackgroundColor(Color.BLACK);
                   WebSettings s = w.getSettings();
                   s.setJavaScriptEnabled(true);
-                  s.setDomStorageEnabled(true);          // playlists saved in localStorage
+                  s.setDomStorageEnabled(true);
                   s.setAllowFileAccess(true);
                   Bridge br = new Bridge(this, w);
                   w.addJavascriptInterface(br, "A");
-                  new Thread(br::killBg).start();      // battery: close background apps once on entry
+                  new Thread(br::killBg).start();
                   setContentView(w);
                   w.loadUrl("file:///android_asset/index.html");
               }
 
               View bar;
-              /** Invisible touch-blocker over the status bar so the notification shade can't be pulled down (only while this app is in front). */
               void lockBar(boolean on) {
                   try {
                       WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
@@ -798,14 +833,13 @@ jobs:
               }
 
               @Override protected void onResume() { super.onResume(); w.onResume(); immersive(); w.evaluateJavascript("pausedApp=false;if(window.wake)wake();if(window.upd)upd()", null); lockBar(true); }
-              // If the notification shade / system dialogs are pulled down, close them right away
               @Override public void onWindowFocusChanged(boolean f) {
                   super.onWindowFocusChanged(f);
                   if (f) immersive(); else sendBroadcast(new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS));
               }
 
-              @Override protected void onPause() { super.onPause(); w.evaluateJavascript("pausedApp=true", null); w.onPause(); lockBar(false); }   // JS timers stop = saves battery
-              @Override public void onBackPressed() { w.evaluateJavascript("back()", null); } // never exit launcher
+              @Override protected void onPause() { super.onPause(); w.evaluateJavascript("pausedApp=true", null); w.onPause(); lockBar(false); }
+              @Override public void onBackPressed() { w.evaluateJavascript("back()", null); }
           }
           EOF_X
           mkdir -p 'app/src/main/java/com/ipod/classic'
@@ -824,12 +858,11 @@ jobs:
           import java.util.ArrayList;
           import java.util.List;
 
-          /** Native playback: keeps playing (and auto-advancing) with the screen off. */
           public class Player {
               static MediaPlayer mp;
               static Context app;
               static final List<String> q = new ArrayList<>();
-              static int idx = -1, repeat = 0, err = 0, streak = 0;   // repeat: 0 off, 1 all, 2 one
+              static int idx = -1, repeat = 0, err = 0, streak = 0;
               static boolean ready = false, shuffle = false, focusPaused = false, triedCache = false, volSet = false, loading = false;
               static String errMsg = "";
 
@@ -870,7 +903,7 @@ jobs:
                       }
                       AudioManager am = (AudioManager) app.getSystemService(Context.AUDIO_SERVICE);
                       am.requestAudioFocus(FL, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
-                      if (!volSet) {                       // first play: make sure media volume is audible
+                      if (!volSet) {
                           volSet = true;
                           int mx = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
                           if (am.getStreamVolume(AudioManager.STREAM_MUSIC) < mx * 0.4) am.setStreamVolume(AudioManager.STREAM_MUSIC, (int) (mx * 0.6), 0);
@@ -888,7 +921,7 @@ jobs:
                   ready = false;
                   try { mp.reset(); } catch (Exception e) {}
                   String src = (idx >= 0 && idx < q.size()) ? q.get(idx) : "";
-                  if (src.startsWith("http") && !triedCache) {      // old Android can't stream some HTTPS: download then play
+                  if (src.startsWith("http") && !triedCache) {
                       triedCache = true; loading = true; cacheAndPlay(src, idx);
                   } else fail("Cannot play this file (" + what + ")");
               }
