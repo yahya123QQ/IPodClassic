@@ -30,7 +30,6 @@ jobs:
 
           export PATH="$SDK_ROOT/cmdline-tools/latest/bin:$SDK_ROOT/platform-tools:$PATH"
           yes | sdkmanager --sdk_root="$SDK_ROOT" --licenses > /dev/null || true
-          sdkmanager --sdk_root="$SDK_ROOT" --no_https "platform-tools" "platforms;android-34" "build-tools;34.0.0" || \
           sdkmanager --sdk_root="$SDK_ROOT" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
@@ -40,10 +39,13 @@ jobs:
       - name: Create Android project with iPod Classic UI & Playback Engine
         run: |
           set -e
+          SDK_ROOT="$HOME/android-sdk"
           mkdir -p app/src/main/java/com/ipodclassic/player
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/assets
+
+          echo "sdk.dir=$SDK_ROOT" > local.properties
 
           cat << 'EOF' > settings.gradle
           pluginManagement {
@@ -988,8 +990,8 @@ jobs:
           </html>
           EOF
 
-          gradle wrapper --gradle-version 8.4 --distribution-type bin --no-daemon
-          ./gradlew assembleDebug --no-daemon
+          gradle wrapper --gradle-version 8.7 --distribution-type bin --no-daemon --warning-mode=summary
+          ./gradlew assembleDebug --no-daemon --warning-mode=summary
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
