@@ -1,4 +1,4 @@
-Name: Build iPod Classic APK
+name: Build iPod Classic APK
 
 on:
   push:
@@ -266,4 +266,981 @@ jobs:
           var curRec={name:'مشاري العفاسي',server:'https://download.quranicaudio.com/quran/mishaari_raashid_al_3afaasee/',list:''};
           function pad3(n){return n<10?'00'+n:n<100?'0'+n:''+n}
           function nrm(s){return String(s).toLowerCase().replace(/[\u064B-\u0652\u0640]/g,'').replace(/[\u0623\u0625\u0622]/g,'\u0627').replace(/\u0629/g,'\u0647').replace(/\u0649/g,'\u064A')}
-          funct
+          function lz(l){return l.map(function(x){return{p:'lazy:'+x[0]+'\t'+x[1],t:x[0],a:x[1],b:'Online',d:0}})}
+
+          // ---- screens ----
+          function src(p){return p.indexOf('/storage/')==0&&p.indexOf('/storage/emulated')!=0&&p.indexOf('/storage/self')!=0?'SD card':'Phone'}
+          function mqList(a){mqs=a.filter(Boolean).map(function(e){e.scrollLeft=0;return{e:e,p:0,d:1,w:12}})}
+          function clean(t){t.a=(!t.a||t.a=='<unknown>')?'Unknown':t.a;t.b=(!t.b||t.b=='<unknown>')?'Unknown':t.b;t.t=t.t||'Untitled';return t}
+          function mainMenu(){return{title:'iPod',items:[
+           {t:'Now Playing',f:function(){if(cur>=0)push({title:'Now Playing',np:1});else toast('Nothing playing')}},
+           {t:'Songs',s:'>',f:function(){push(songsMenu())}},
+           {t:'Podcasts',s:'>',f:function(){push(podMenu())}},
+           {t:'Quran',s:'>',f:function(){push(quranMenu())}},
+           {t:'Library',s:'>',f:function(){push(libMenu())}},
+           {t:'Settings',s:'>',f:function(){push(setMenu())}},
+           {t:'Exit',f:function(){A.exit()}}]}}
+          function shufItem(rf){return{t:'Shuffle',s:shuf?'ON':'OFF',f:function(){togShuf();refresh(rf)}}}
+          function repItem(rf){return{t:'Repeat',s:['Off','All','One'][rep],f:function(){rep=(rep+1)%3;A.setRepeat(rep);optSave();refresh(rf)}}}
+          function curScreen(T,title){return{title:title,items:T.map(function(t,i){return{t:t.t,s:t.a,cov:1,tr:t,f:function(){play(T,i)}}}),ctx:function(it){dlTrack(it.tr)}}}
+
+          // Songs
+          function songsMenu(){return{title:'Songs',items:[
+           {t:'Popular Hits',s:'>',f:function(){push(curScreen(lz(HITS),'Popular Hits'))}},
+           {t:'Moroccan Hits',s:'>',f:function(){push(curScreen(lz(MAR),'Moroccan Hits'))}},
+           {t:'Moroccan Artists',s:'>',f:function(){push({title:'Moroccan Artists',items:MART.map(function(n){return{t:n,f:function(){audSearch(n)}}})})}},
+           {t:'Search Online',s:'>',f:function(){askQ('aud','Song or artist...')}},
+           {t:'Free Music (Archive)',s:'>',f:function(){askQ('ia','Artist or song...')}},
+           {t:'Shuffle All Hits',f:function(){play(shuffleArr(lz(HITS.concat(MAR))),0)}},
+           shufItem(songsMenu),repItem(songsMenu)]}}
+
+          // Podcasts
+          function podMenu(){return{title:'Podcasts',items:[
+           {t:'Search Podcasts',s:'>',f:function(){askQ('pod','Podcast name...')}},
+           {t:'Popular Podcasts',s:'>',f:function(){push({title:'Popular',items:PODS.map(function(n){return{t:n,f:function(){podSearch(n)}}})})}}]}}
+
+          // Quran
+          function quranMenu(){return{title:'Quran',items:[
+           {t:'Surahs',s:curRec.name,f:function(){push(surahScreen(curRec))}},
+           {t:'Reciters',s:'>',f:function(){loadRecs(function(R){push({title:'Reciters',empty:'No reciters',items:R.map(function(r){return{t:r.name,f:function(){curRec=r;push(surahScreen(r))}}})})})}},
+           {t:'Search',s:'Surah / Reciter',f:function(){askQ('quran','\u0627\u0628\u062D\u062B \u0639\u0646 \u0633\u0648\u0631\u0629 \u0623\u0648 \u0642\u0627\u0631\u0626...')}},
+           shufItem(quranMenu)]}}
+          function surahTracks(rec){var T=[],n;for(n=1;n<=114;n++){if(rec.list&&rec.list.indexOf(','+n+',')<0)continue;
+           T.push({p:rec.server+pad3(n)+'.mp3',t:n+'. '+SUR[n-1],a:rec.name,b:'\u0627\u0644\u0642\u0631\u0622\u0646 \u0627\u0644\u0643\u0631\u064A\u0645',d:0,n:n})}return T}
+          function surahScreen(rec){var T=surahTracks(rec);
+           return{title:rec.name,empty:'No surahs',items:T.map(function(t,i){return{t:t.t,f:function(){play(T,i)},tr:t,dl:1}}),ctx:function(it){dlTrack(it.tr)}}}
+          function loadRecs(cb){if(recs){cb(recs);return}toast('Loading reciters...');
+           get('https://mp3quran.net/api/v3/reciters?language=ar',function(r){var out=[];
+            try{JSON.parse(r).reciters.forEach(function(x){(x.moshaf||[]).forEach(function(m){if(!m.server)return;
+             out.push({name:x.name+(x.moshaf.length>1?' - '+m.name:''),server:m.server.replace(/\/?$/,'/'),list:m.surah_list?(','+m.surah_list+','):''})})})}catch(e){}
+            if(!out.length){toast('Cannot load reciters - check Wi-Fi');cb([]);return}recs=out;cb(out)})}
+          function quranSearch(q){var n=nrm(q),num=parseInt(q,10),T=surahTracks(curRec),items=[];
+           T.forEach(function(t,i){if(nrm(SUR[t.n-1]).indexOf(n)>=0||t.n==num)items.push({t:t.t,s:curRec.name,tr:t,dl:1,f:function(){play(T,i)}})});
+           loadRecs(function(R){R.forEach(function(r){if(nrm(r.name).indexOf(n)>=0&&items.length<60)items.push({t:r.name,s:'\u0642\u0627\u0631\u0626',f:function(){curRec=r;push(surahScreen(r))}})});
+            push({title:'Search',empty:'No results',items:items,ctx:function(it){if(it.tr)dlTrack(it.tr)}})})}
+
+          // Library
+          function libMenu(){return{title:'Library',items:[
+           {t:'All Songs',s:lib.length,f:function(){push(songs(lib,'Songs',true))}},
+           {t:'Artists',s:'>',f:artists},
+           {t:'Albums',s:'>',f:albums},
+           {t:'Downloads',s:'>',f:function(){push(songs(lib.filter(function(t){return t.p.indexOf('/Music/iPod/')>=0}),'Downloads',true))}},
+           {t:'Search Library',s:'>',f:function(){askQ('loc','Search your songs...')}},
+           {t:'Playlists',s:'>',f:function(){push(plMenu())}},
+           {t:'Wi-Fi Upload',s:'PC',f:function(){var u=A.startServer();if(!u){toast('Connect to Wi-Fi first');return}push({title:'Upload',items:[{t:'Open on your PC:'},{t:u},{t:'Stop & close',f:function(){back()}}]})}},
+           {t:'Shuffle Library',f:function(){if(lib.length)play(shuffleArr(lib),0)}},
+           shufItem(libMenu)]}}
+          function songs(list,title,addable,plname){return{title:title,empty:'No songs - copy MP3s or use Wi-Fi Upload',items:list.map(function(t,i){return{t:t.t,s:t.a,f:function(){play(list,i)},tr:t}}),
+           ctx:function(it){if(plname){var k=pls[plname].indexOf(it.tr.p);if(k>=0){pls[plname].splice(k,1);savePl();toast('Removed');S.pop();push(songs(plTracks(plname),title,false,plname))}}
+            else if(addable)push(actMenu(it.tr))}}}
+          function actMenu(tr){var it=[{t:'Add to playlist',f:function(){push(addMenu(tr))}}];
+           if(tr.p.indexOf('/Music/iPod/')>=0)it.push({t:'Delete from phone',f:function(){push({title:'Delete?',items:[{t:'Yes, delete',f:function(){if(A.del(tr.p)){loadLib();S=[S[0]];push(libMenu());toast('Deleted')}else toast('Cannot delete')}},{t:'Cancel',f:function(){S.pop();draw()}}]})}});
+           return{title:tr.t,items:it}}
+          function artists(){var m={};lib.forEach(function(t){(m[t.a]=m[t.a]||[]).push(t)});
+           push({title:'Artists',items:Object.keys(m).sort().map(function(n){return{t:n,s:m[n].length,f:function(){push(songs(m[n],n,true))}}})})}
+          function albums(){var m={};lib.forEach(function(t){(m[t.b]=m[t.b]||[]).push(t)});
+           push({title:'Albums',items:Object.keys(m).sort().map(function(n){return{t:n,s:m[n].length,f:function(){push(songs(m[n],n,true))}}})})}
+          function locMatch(q){q=q.toLowerCase();return lib.filter(function(t){return(t.t+' '+t.a+' '+t.b).toLowerCase().indexOf(q)>=0})}
+          function plTracks(n){return pls[n].map(function(p){for(var i=0;i<lib.length;i++)if(lib[i].p==p)return lib[i]}).filter(Boolean)}
+          function plMenu(){var items=Object.keys(pls).map(function(n){return{t:n,s:pls[n].length,f:function(){push(songs(plTracks(n),n,false,n))}}});
+           items.push({t:'+ New Playlist',f:function(){var n='Playlist '+(Object.keys(pls).length+1);pls[n]=[];savePl();S.pop();push(plMenu())}});
+           return{title:'Playlists',items:items}}
+          function addMenu(tr){var items=Object.keys(pls).map(function(n){return{t:n,f:function(){if(pls[n].indexOf(tr.p)<0)pls[n].push(tr.p);savePl();toast('Added to '+n);S.pop();S.pop();draw()}}});
+           return{title:'Add to...',empty:'Create a playlist first',items:items}}
+          function setMenu(){return{title:'Settings',items:[
+           shufItem(setMenu),repItem(setMenu),
+           {t:'Sleep timer',s:slp?slp+' min':'Off',f:function(){var o=[0,15,30,60];slp=o[(o.indexOf(slp)+1)%4];A.sleep(slp);refresh(setMenu);toast(slp?'Music stops in '+slp+' min':'Sleep timer off')}},
+           {t:'Rescan Library',f:function(){loadLib();toast(lib.length+' songs')}}]}}
+          function askQ(mode,ph){qmode=mode;$('qi').placeholder=ph;$('qb').style.display='block';$('qi').value='';$('sg').innerHTML='';$('qi').focus()}
+
+          // ---- playback ----
+          function play(list,i){Q=list.slice();cur=i;A.playQueue(JSON.stringify(Q.map(function(t){return t.p})),i);
+           if(!cs().np)push({title:'Now Playing',np:1});else drawNP()}
+          function poll(force){if(!force&&!cs().np&&(++pc%4))return;var s;try{s=JSON.parse(A.state())}catch(e){return}st=s;
+           if(s.e>lastE){lastE=s.e;toast(s.m||'Playback error')}if(s.l&&!wasL)toast('Loading...');wasL=!!s.l;
+           if(s.i>=0&&s.i!=cur&&Q[s.i]){cur=s.i;if(cs().np)drawNP()}
+           if(cs().np){var d=s.d||0;
+            $('pf').style.width=(d?Math.min(100,s.p*100/d):0)+'%';$('tl').textContent=fmt(s.p/1000);$('tr').textContent='-'+fmt((d-s.p)/1000);
+            try{var v=A.volume().split(',');$('vf').style.width=(v[0]*100/v[1])+'%'}catch(e){}
+            $('md').textContent=(npm=='vol'?'Wheel: Volume (center = scrub)':'Wheel: Scrub (center = volume)')+(rep==1?' | Repeat all':rep==2?' | Repeat one':'')}}
+
+          // ---- online ----
+          function get(u,f){cbs[++cid]=f;A.get(u,cid)}
+          function onHttp(id,ok,b){var f=cbs[id];delete cbs[id];if(f)f(ok?b:null)}
+          function onDl(id,p,path){var t=dls[id];if(!t)return;
+           if(p==-1){toast('Download failed');delete dls[id]}
+           else if(p==101){lib.push(clean({p:path,t:t.t,a:t.a,b:'Downloads',d:t.d}));toast('Saved: '+t.t);delete dls[id]}
+           else toast('Downloading '+p+'%')}
+          function trackScreen(T,title){return{title:title,empty:'No results',items:T.map(function(t,i){return{t:t.t,s:t.a,f:function(){play(T,i)},tr:t,dl:1,img:t.img}}),
+           ctx:function(it){dlTrack(it.tr)}}}
+          function dlTrack(t){if(!t||t.p.indexOf('http')!=0){toast('Download works for online results, podcasts and Quran');return}var id=++did;dls[id]=t;toast('Downloading...');A.download(t.p,t.t+' - '+t.a,id,t.img||'')}
+          function host(f){if(H)return f(H);get('https://api.audius.co',function(r){try{H=JSON.parse(r).data[0]}catch(e){H='https://api.audius.co'}f(H)})}
+          // most popular first; remixes / covers / edits are pushed down unless the query asks for them
+          var BADG=/\b(remix|cover|nightcore|sped up|speed up|slowed|reverb|bass boost(?:ed)?|mashup|karaoke|instrumental|8d|bootleg|rework|lofi|lo-fi|tribute|type beat|live|acoustic|piano|version|edit|flip)\b/g;
+          function rankAud(d,q){var ql=q.toLowerCase();return d.map(function(x){var s=Math.log(1+(x.play_count||0)),m=(String(x.title).toLowerCase().match(BADG)||[]),i;
+           for(i=0;i<m.length;i++)if(ql.indexOf(m[i])<0){s-=50;break}return{x:x,s:s}}).sort(function(a,b){return b.s-a.s}).map(function(o){return o.x})}
+          function audSearch(q,fixed){toast('Searching...');host(function(h){
+           get(h+'/v1/tracks/search?query='+encodeURIComponent(q)+'&limit=30&app_name=IPODCLASSIC',function(r){
+            var d;try{d=JSON.parse(r).data}catch(e){}if(!d){toast('Search failed - check Wi-Fi');return}
+            if(!d.length){if(fixed){toast('No results');return}
+             get('https://itunes.apple.com/search?media=music&entity=song&limit=1&term='+encodeURIComponent(q),function(r2){
+              try{var x=JSON.parse(r2).results[0];if(x){toast('Showing results for: '+x.trackName);audSearch(x.trackName+' '+x.artistName,true);return}}catch(e){}toast('No results')});return}
+            d=rankAud(d,q);
+            var T=d.map(function(x){return{p:h+'/v1/tracks/'+x.id+'/stream?app_name=IPODCLASSIC',t:x.title,a:x.user?x.user.name:'',b:'Audius',d:x.duration||0,img:x.artwork?x.artwork['150x150']:''}});
+            push(trackScreen(T,'Top results'));toast('Most popular first. Tap = play, arrow = download')})})}
+          function suggest(q){if(qmode=='ia'||qmode=='quran')return;if(qmode=='loc'){showSg(locMatch(q).slice(0,6).map(function(t){return{t:t.t+' - '+t.a,q:t.t}}));return}
+           if(qmode=='pod'){get('https://itunes.apple.com/search?media=podcast&limit=5&term='+encodeURIComponent(q),function(r){try{showSg(JSON.parse(r).results.map(function(x){return{t:x.collectionName,q:x.collectionName,img:x.artworkUrl60}}))}catch(e){}});return}
+           host(function(h){get(h+'/v1/tracks/search?query='+encodeURIComponent(q)+'&limit=15&app_name=IPODCLASSIC',function(r){try{showSg(rankAud(JSON.parse(r).data,q).slice(0,5).map(function(x){return{t:x.title+' - '+(x.user?x.user.name:''),q:x.title,img:x.artwork?x.artwork['150x150']:''}}))}catch(e){}})})}
+          function showSg(it){sgq=it.map(function(x){return x.q});$('sg').innerHTML=it.map(function(x,i){return'<div class="g" data-k="'+i+'">'+(x.img?'<img class="th" src="'+esc(x.img)+'">':'')+'<div class="tt" dir="auto">'+esc(x.t)+'</div></div>'}).join('')}
+          function doSearch(q){$('sg').innerHTML='';if(qmode=='pod')podSearch(q);else if(qmode=='ia')iaSearch(q);else if(qmode=='quran')quranSearch(q);else if(qmode=='loc')push(songs(locMatch(q),'Results',true));else audSearch(q)}
+          function iaSearch(q){toast('Searching...');get('https://archive.org/advancedsearch.php?q='+encodeURIComponent('('+q+') AND mediatype:audio AND format:MP3')+'&fl[]=identifier&fl[]=title&fl[]=creator&sort[]=downloads+desc&rows=20&output=json',function(r){
+           var d;try{d=JSON.parse(r).response.docs}catch(e){}if(!d||!d.length){toast('No results - check Wi-Fi');return}
+           push({title:'Free Music',items:d.map(function(x){return{t:x.title,s:Array.isArray(x.creator)?x.creator[0]:(x.creator||''),f:function(){iaFiles(x)}}})})})}
+          function iaFiles(x){toast('Loading tracks...');get('https://archive.org/metadata/'+x.identifier,function(r){var m,T=[],seen={};try{m=JSON.parse(r)}catch(e){}
+           if(!m||!m.files){toast('Failed to load');return}
+           var a=Array.isArray(x.creator)?x.creator[0]:(x.creator||'');
+           m.files.forEach(function(f){if(!/\.mp3$/i.test(f.name)||f.format=='Sample')return;var k=(f.title||f.name).toLowerCase();if(seen[k]||T.length>=40)return;seen[k]=1;
+            T.push({p:'https://archive.org/download/'+x.identifier+'/'+f.name.split('/').map(encodeURIComponent).join('/'),t:f.title||f.name.replace(/\.mp3$/i,''),a:f.artist||f.creator||a,b:x.title,d:parseFloat(f.length)||0})});
+           if(!T.length){toast('No MP3 files here');return}push(trackScreen(T,'Tracks'));toast('Full length. Tap = play, arrow = download')})}
+          function podSearch(q){toast('Searching...');
+           get('https://itunes.apple.com/search?media=podcast&limit=20&term='+encodeURIComponent(q),function(r){
+            var d;try{d=JSON.parse(r).results}catch(e){}if(!d||!d.length){toast('No results - check Wi-Fi');return}
+            push({title:'Podcasts',empty:'No results',items:d.filter(function(x){return x.feedUrl}).map(function(x){return{t:x.collectionName,s:x.artistName,img:x.artworkUrl60,f:function(){episodes(x)}}})})})}
+          function episodes(x){toast('Loading episodes...');get(x.feedUrl,function(r){if(!r){toast('Feed failed');return}
+           var parts=r.split('<item'),T=[],i;
+           for(i=1;i<parts.length&&T.length<40;i++){var p=parts[i],u=/<enclosure[^>]*url=["']([^"']+)["']/.exec(p),t=/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/.exec(p);
+            if(u)T.push({p:u[1].replace(/&amp;/g,'&'),t:t?t[1].trim():'Episode',a:x.collectionName,b:'Podcast',d:0,img:x.artworkUrl100})}
+           if(!T.length){toast('No episodes');return}push(trackScreen(T,'Episodes'));toast('Tap = play, arrow = download')})}
+          $('qi').oninput=function(){clearTimeout(sgt);var q=this.value.replace(/^\s+|\s+$/g,'');if(q.length<2){$('sg').innerHTML='';return}sgt=setTimeout(function(){suggest(q)},450)};
+          $('sg').addEventListener('click',function(e){var n=e.target;while(n&&n!==this&&!(n.getAttribute&&n.getAttribute('data-k')!=null))n=n.parentNode;
+           if(n&&n.getAttribute&&n.getAttribute('data-k')!=null){$('qb').style.display='none';$('qi').blur();doSearch(sgq[parseInt(n.getAttribute('data-k'),10)])}},false);
+          $('qi').onkeydown=function(e){if(e.keyCode==13){var q=this.value;this.blur();$('qb').style.display='none';if(q)doSearch(q)}};
+
+          // ---- click wheel ----
+          var W=$('wheel'),ang=0,acc=0,moved=0,tid=null,lng=0,zone=false;
+          function pt(e){var t=(e.touches&&e.touches[0])||e.changedTouches[0],r=W.getBoundingClientRect(),
+           x=t.clientX-(r.left+r.width/2),y=t.clientY-(r.top+r.height/2);
+           return{d:Math.sqrt(x*x+y*y),a:Math.atan2(y,x)*180/Math.PI,R:r.width/2}}
+          W.addEventListener('touchstart',function(e){e.preventDefault();var p=pt(e);zone=p.d<p.R*0.38;ang=p.a;acc=0;moved=0;lng=0;
+           if(zone)tid=setTimeout(function(){lng=1;ctx()},600)},false);
+          W.addEventListener('touchmove',function(e){e.preventDefault();if(zone)return;var p=pt(e),d=p.a-ang;
+           if(d>180)d-=360;if(d<-180)d+=360;ang=p.a;acc+=d;moved+=Math.abs(d);
+           var step=cs().np?14:24;
+           while(acc>=step){acc-=step;mv(1)}while(acc<=-step){acc+=step;mv(-1)}},false);
+          W.addEventListener('touchend',function(e){e.preventDefault();clearTimeout(tid);
+           if(zone){if(!lng)sel();return}
+           if(moved<12){var a=ang;
+            if(a>-135&&a<-45)back();else if(a>=-45&&a<=45)A.next();else if(a>45&&a<135)A.toggle();else A.prev()}},false);
+
+          // ---- status & init ----
+          function upd(){var d=new Date();$('clk').textContent=d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes();
+           try{var s=JSON.parse(A.status());$('pc').textContent=s.b+'%'+(s.c?' +':'');$('bf').style.width=s.b+'%';$('bf').style.background=s.b<20?'#e44':'#4c4';
+            $('wfi').textContent=s.w?(s.n?'Wi-Fi connected':'Wi-Fi searching'):'Wi-Fi off'}catch(e){}}
+          function loadLib(){try{lib=JSON.parse(A.library()).map(clean)}catch(e){lib=[]}}
+          function layout(){var w=window.innerWidth,h=window.innerHeight,I=$('ipod'),
+           bw=Math.min(w*0.96,h*0.62),H0=h-24,bh=H0*0.97,sz=Math.min(bw*0.82,bh*0.40);
+           I.style.width=bw+'px';I.style.height=bh+'px';I.style.left=(w-bw)/2+'px';I.style.top=(24+(H0-bh)/2)+'px';
+           W.style.width=W.style.height=sz+'px';W.style.left=(bw-sz)/2+'px';W.style.top=(bh*0.52+(bh*0.48-sz)/2)+'px';
+           ROWS=Math.max(3,Math.floor(($('scr').offsetHeight-8-30)/44));if(S.length)draw()}
+          window.onresize=layout;
+          try{layout();loadLib();push(mainMenu());upd();A.setShuffle(shuf);A.setRepeat(rep);shbUpd()}catch(e){document.body.innerHTML='<pre style="color:#f66;padding:10px">ERR: '+e+'</pre>'}
+          setInterval(function(){for(var i=0;i<mqs.length;i++){var o=mqs[i],m=o.e.scrollWidth-o.e.clientWidth;if(m<=0)continue;if(o.w>0){o.w--;continue}o.p+=o.d*2;if(o.p>=m){o.p=m;o.d=-1;o.w=12}else if(o.p<=0){o.p=0;o.d=1;o.w=12}o.e.scrollLeft=o.p}},80);
+          setInterval(poll,500);setInterval(upd,15000);
+          </script></body></html>
+          EOF_X
+
+      - name: Write app/src/main/java/com/ipod/classic/MainActivity.java
+        run: |
+          mkdir -p 'app/src/main/java/com/ipod/classic'
+          cat > 'app/src/main/java/com/ipod/classic/MainActivity.java' <<'EOF_X'
+          package com.ipod.classic;
+
+          import android.Manifest;
+          import android.app.Activity;
+          import android.content.pm.PackageManager;
+          import android.graphics.Color;
+          import android.media.AudioManager;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.view.View;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+
+          public class MainActivity extends Activity {
+              WebView w;
+
+              @Override protected void onCreate(Bundle b) {
+                  super.onCreate(b);
+                  setVolumeControlStream(AudioManager.STREAM_MUSIC);   // volume keys always control music
+                  w = new WebView(this);
+                  w.setBackgroundColor(Color.BLACK);
+                  WebSettings s = w.getSettings();
+                  s.setJavaScriptEnabled(true);
+                  s.setDomStorageEnabled(true);                         // playlists / options saved in localStorage
+                  s.setAllowFileAccess(true);
+                  if (Build.VERSION.SDK_INT >= 21) s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+                  w.addJavascriptInterface(new Bridge(this, w), "A");
+                  setContentView(w);
+                  w.loadUrl("file:///android_asset/index.html");
+                  if (Build.VERSION.SDK_INT >= 23 && (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+                          || checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)) {
+                      requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
+                  }
+              }
+
+              @Override public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
+                  super.onRequestPermissionsResult(code, perms, res);
+                  w.evaluateJavascript("if(window.loadLib){loadLib();if(window.draw)draw()}", null);
+              }
+
+              void immersive() {
+                  getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN
+                      | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+              }
+
+              @Override protected void onResume() { super.onResume(); w.onResume(); immersive(); }
+              @Override public void onWindowFocusChanged(boolean f) { super.onWindowFocusChanged(f); if (f) immersive(); }
+              // JS timers stop while hidden (saves battery) - playback itself is native and keeps going
+              @Override protected void onPause() { super.onPause(); w.onPause(); }
+              @Override public void onBackPressed() { w.evaluateJavascript("back()", null); }
+          }
+          EOF_X
+
+      - name: Write app/src/main/java/com/ipod/classic/KeepAliveService.java
+        run: |
+          mkdir -p 'app/src/main/java/com/ipod/classic'
+          cat > 'app/src/main/java/com/ipod/classic/KeepAliveService.java' <<'EOF_X'
+          package com.ipod.classic;
+
+          import android.app.Notification;
+          import android.app.NotificationChannel;
+          import android.app.NotificationManager;
+          import android.app.PendingIntent;
+          import android.app.Service;
+          import android.content.BroadcastReceiver;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.content.IntentFilter;
+          import android.media.AudioManager;
+          import android.net.wifi.WifiManager;
+          import android.os.Build;
+          import android.os.IBinder;
+
+          /** Foreground service: keeps the process alive so music (and auto-advance) continues with the screen off. */
+          public class KeepAliveService extends Service {
+              static void start(Context c) {
+                  if (c == null) return;
+                  try {
+                      Intent i = new Intent(c, KeepAliveService.class);
+                      if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i); else c.startService(i);
+                  } catch (Exception e) {}
+              }
+
+              static void stop(Context c) {
+                  if (c != null) c.stopService(new Intent(c, KeepAliveService.class));
+              }
+
+              WifiManager.WifiLock wl;
+
+              final BroadcastReceiver noisy = new BroadcastReceiver() {
+                  @Override public void onReceive(Context c, Intent i) { Player.pause(); }
+              };
+
+              @Override public void onCreate() {
+                  super.onCreate();
+                  registerReceiver(noisy, new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY));
+                  try {
+                      WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                      wl = wm.createWifiLock(WifiManager.WIFI_MODE_FULL, "ipod");
+                      wl.acquire();
+                  } catch (Exception e) {}
+              }
+
+              @Override public void onDestroy() {
+                  try { unregisterReceiver(noisy); } catch (Exception e) {}
+                  try { if (wl != null && wl.isHeld()) wl.release(); } catch (Exception e) {}
+                  super.onDestroy();
+              }
+
+              @Override public int onStartCommand(Intent i, int f, int id) {
+                  PendingIntent pi = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class),
+                      Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
+                  Notification.Builder b;
+                  if (Build.VERSION.SDK_INT >= 26) {
+                      NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                      nm.createNotificationChannel(new NotificationChannel("ipod", "iPod playback", NotificationManager.IMPORTANCE_LOW));
+                      b = new Notification.Builder(this, "ipod");
+                  } else {
+                      b = new Notification.Builder(this);
+                  }
+                  b.setContentTitle("iPod").setContentText("Playing music")
+                      .setSmallIcon(android.R.drawable.ic_media_play).setContentIntent(pi).setOngoing(true);
+                  startForeground(1, b.build());
+                  return START_STICKY;
+              }
+
+              @Override public IBinder onBind(Intent i) { return null; }
+          }
+          EOF_X
+
+      - name: Write app/src/main/java/com/ipod/classic/Player.java
+        run: |
+          mkdir -p 'app/src/main/java/com/ipod/classic'
+          cat > 'app/src/main/java/com/ipod/classic/Player.java' <<'EOF_X'
+          package com.ipod.classic;
+
+          import android.content.Context;
+          import android.media.AudioManager;
+          import android.media.MediaPlayer;
+          import android.os.PowerManager;
+          import java.io.File;
+          import java.io.FileOutputStream;
+          import java.io.InputStream;
+          import java.net.HttpURLConnection;
+          import java.net.URLEncoder;
+          import java.util.ArrayList;
+          import java.util.List;
+          import org.json.JSONArray;
+          import org.json.JSONObject;
+
+          /** Native playback: keeps playing (and auto-advancing) with the screen off. */
+          public class Player {
+              static MediaPlayer mp;
+              static Context app;
+              static final List<String> q = new ArrayList<String>();
+              static int idx = -1, repeat = 0, err = 0, streak = 0, gen = 0;   // repeat: 0 off, 1 all, 2 one
+              static boolean ready = false, shuffle = false, focusPaused = false, triedCache = false, volSet = false, loading = false;
+              static String errMsg = "", audiusHost = null;
+
+              static final String[] BAD = {"remix", "cover", "nightcore", "sped up", "speed up", "slowed", "reverb", "bass boost",
+                  "mashup", "karaoke", "instrumental", "8d", "bootleg", "rework", "lofi", "lo fi", "tribute", "type beat",
+                  "live", "acoustic", "piano", "version", "edit", "flip"};
+
+              static final AudioManager.OnAudioFocusChangeListener FL = new AudioManager.OnAudioFocusChangeListener() {
+                  public void onAudioFocusChange(int c) {
+                      synchronized (Player.class) {
+                          try {
+                              if (mp == null || !ready) return;
+                              if (c == AudioManager.AUDIOFOCUS_LOSS) { if (mp.isPlaying()) mp.pause(); focusPaused = false; }
+                              else if (c == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) { if (mp.isPlaying()) { mp.pause(); focusPaused = true; } }
+                              else if (c == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) mp.setVolume(0.3f, 0.3f);
+                              else if (c == AudioManager.AUDIOFOCUS_GAIN) { mp.setVolume(1f, 1f); if (focusPaused) { mp.start(); focusPaused = false; } }
+                          } catch (Exception e) {}
+                      }
+                  }
+              };
+
+              static synchronized void setQueue(Context c, JSONArray a, int start) {
+                  app = c.getApplicationContext();
+                  q.clear();
+                  for (int i = 0; i < a.length(); i++) q.add(a.optString(i));
+                  play(start);
+              }
+
+              static synchronized void play(final int i) {
+                  if (i < 0 || i >= q.size()) return;
+                  idx = i; triedCache = false; gen++;
+                  final int g = gen;
+                  String s = q.get(i);
+                  if (s.startsWith("lazy:")) {
+                      // online catalogue entry "title<TAB>artist": find the most popular original version first
+                      loading = true; ready = false;
+                      try { if (mp != null) mp.reset(); } catch (Exception e) {}
+                      KeepAliveService.start(app);
+                      final String spec = s.substring(5);
+                      new Thread(new Runnable() {
+                          public void run() {
+                              String u = resolve(spec);
+                              synchronized (Player.class) {
+                                  if (g != gen) return;
+                                  if (u == null) { fail("Not found online"); return; }
+                                  if (u.contains("apple.com")) { err++; errMsg = "Only a 30s preview is available"; }
+                                  q.set(i, u);
+                                  playSrc(u);
+                              }
+                          }
+                      }).start();
+                  } else {
+                      playSrc(s);
+                  }
+              }
+
+              static String norm(String s) {
+                  return s == null ? "" : s.toLowerCase().replaceAll("[^\\p{L}\\p{N} ]", " ").replaceAll("\\s+", " ").trim();
+              }
+
+              static String host() {
+                  if (audiusHost != null) return audiusHost;
+                  try {
+                      audiusHost = new JSONObject(Net.text("https://api.audius.co")).getJSONArray("data").getString(0);
+                  } catch (Exception e) { audiusHost = "https://api.audius.co"; }
+                  return audiusHost;
+              }
+
+              /** Returns a stream URL for "title\tartist": Audius (most played, no remixes/covers), else iTunes 30s preview. */
+              static String resolve(String spec) {
+                  String[] p = spec.split("\t", 2);
+                  String title = p[0], artist = p.length > 1 ? p[1] : "";
+                  String qs = (title + " " + artist).trim();
+                  String qn = " " + norm(qs) + " ";
+                  String tn = norm(title), an = norm(artist);
+                  try {
+                      String h = host();
+                      JSONArray d = new JSONObject(Net.text(h + "/v1/tracks/search?query=" + URLEncoder.encode(qs, "UTF-8")
+                          + "&limit=25&app_name=IPODCLASSIC")).getJSONArray("data");
+                      String best = null; double bs = -1e9;
+                      for (int i = 0; i < d.length(); i++) {
+                          JSONObject x = d.getJSONObject(i);
+                          String xt = norm(x.optString("title"));
+                          JSONObject u = x.optJSONObject("user");
+                          String un = norm(u != null ? u.optString("name") : "");
+                          boolean ok = true;
+                          for (String w : tn.split(" ")) if (w.length() >= 2 && !xt.contains(w)) { ok = false; break; }
+                          if (!ok) continue;
+                          boolean artOk = an.length() == 0;
+                          for (String w : an.split(" ")) if (w.length() >= 3 && !w.equals("the") && (xt.contains(w) || un.contains(w))) artOk = true;
+                          if (!artOk) continue;
+                          String xp = " " + xt + " ";
+                          boolean bad = false;
+                          for (String b : BAD) if (xp.contains(" " + b + " ") && !qn.contains(" " + b + " ")) { bad = true; break; }
+                          if (bad) continue;
+                          double s = Math.log(1 + x.optLong("play_count", 0));
+                          if (s > bs) { bs = s; best = x.optString("id"); }
+                      }
+                      if (best != null && best.length() > 0) return h + "/v1/tracks/" + best + "/stream?app_name=IPODCLASSIC";
+                  } catch (Exception e) {}
+                  try {
+                      JSONArray r = new JSONObject(Net.text("https://itunes.apple.com/search?media=music&entity=song&limit=5&term="
+                          + URLEncoder.encode(qs, "UTF-8"))).getJSONArray("results");
+                      for (int i = 0; i < r.length(); i++) {
+                          String u = r.getJSONObject(i).optString("previewUrl");
+                          if (u.length() > 0) return u;
+                      }
+                  } catch (Exception e) {}
+                  return null;
+              }
+
+              static void playSrc(String src) {
+                  ready = false; loading = true;
+                  try {
+                      if (mp == null) {
+                          mp = new MediaPlayer();
+                          mp.setWakeMode(app, PowerManager.PARTIAL_WAKE_LOCK);
+                          mp.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                              public void onPrepared(MediaPlayer m) {
+                                  synchronized (Player.class) { streak = 0; loading = false; ready = true; m.setVolume(1f, 1f); m.start(); }
+                              }
+                          });
+                          mp.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                              public void onCompletion(MediaPlayer m) { done(); }
+                          });
+                          mp.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+                              public boolean onError(MediaPlayer m, int what, int extra) { onErr(what, extra); return true; }
+                          });
+                      }
+                      AudioManager am = (AudioManager) app.getSystemService(Context.AUDIO_SERVICE);
+                      am.requestAudioFocus(FL, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
+                      if (!volSet) {                       // first play: make sure media volume is audible
+                          volSet = true;
+                          int mx = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                          if (am.getStreamVolume(AudioManager.STREAM_MUSIC) < mx * 0.4) am.setStreamVolume(AudioManager.STREAM_MUSIC, (int) (mx * 0.6), 0);
+                      }
+                      mp.reset();
+                      mp.setAudioStreamType(AudioManager.STREAM_MUSIC);
+                      mp.setVolume(1f, 1f);
+                      mp.setDataSource(src);
+                      mp.prepareAsync();
+                      KeepAliveService.start(app);
+                  } catch (Exception e) { fail("Cannot open file"); }
+              }
+
+              static synchronized void onErr(int what, int extra) {
+                  ready = false;
+                  try { mp.reset(); } catch (Exception e) {}
+                  String src = (idx >= 0 && idx < q.size()) ? q.get(idx) : "";
+                  if (src.startsWith("http") && !triedCache) {      // some streams fail on old Android: download then play
+                      triedCache = true; loading = true; cacheAndPlay(src, idx);
+                  } else fail("Cannot play this file (" + what + ")");
+              }
+
+              static void fail(String msg) {
+                  synchronized (Player.class) {
+                      loading = false; ready = false; err++; errMsg = msg;
+                      if (++streak < 3 && idx + 1 < q.size()) play(idx + 1);
+                  }
+              }
+
+              static void cacheAndPlay(final String src, final int i) {
+                  final int g = gen;
+                  new Thread(new Runnable() {
+                      public void run() {
+                          try {
+                              HttpURLConnection h = Net.open(src);
+                              if (h.getResponseCode() >= 400) throw new Exception("HTTP");
+                              File f = new File(app.getCacheDir(), "stream.mp3");
+                              InputStream in = h.getInputStream();
+                              FileOutputStream o = new FileOutputStream(f);
+                              byte[] b = new byte[16384]; int n;
+                              while ((n = in.read(b)) > 0) o.write(b, 0, n);
+                              o.close(); in.close();
+                              synchronized (Player.class) { if (gen == g && idx == i) playSrc(f.getPath()); }
+                          } catch (Exception e) {
+                              synchronized (Player.class) { if (gen == g && idx == i) fail("Stream failed - check Wi-Fi"); }
+                          }
+                      }
+                  }).start();
+              }
+
+              static synchronized void release() {
+                  gen++;
+                  try { if (mp != null) { mp.release(); mp = null; } } catch (Exception e) {}
+                  ready = false; loading = false; q.clear(); idx = -1;
+                  KeepAliveService.stop(app);
+              }
+
+              static synchronized void done() { if (repeat == 2) play(idx); else next(); }
+
+              static synchronized void next() {
+                  int n = idx + 1;
+                  if (shuffle && q.size() > 1) { do { n = (int) (Math.random() * q.size()); } while (n == idx); }
+                  if (n < q.size()) play(n);
+                  else if (repeat == 1 && q.size() > 0) play(0);
+                  else { try { if (mp != null) mp.reset(); } catch (Exception e) {} ready = false; KeepAliveService.stop(app); }
+              }
+
+              static synchronized void prev() {
+                  if (ready && mp != null && mp.getCurrentPosition() > 3000) mp.seekTo(0);
+                  else if (idx > 0) play(idx - 1);
+              }
+
+              static synchronized void toggle() {
+                  if (mp == null || !ready) return;
+                  if (mp.isPlaying()) mp.pause(); else mp.start();
+              }
+
+              static synchronized void pause() { try { if (mp != null && ready && mp.isPlaying()) mp.pause(); } catch (Exception e) {} }
+
+              static synchronized void seek(int ms) {
+                  if (ready && mp != null) mp.seekTo(Math.max(0, Math.min(ms, mp.getDuration())));
+              }
+
+              static synchronized String state() {
+                  int p = 0, d = 0; boolean pl = false;
+                  if (mp != null && ready) { try { p = mp.getCurrentPosition(); d = mp.getDuration(); pl = mp.isPlaying(); } catch (Exception e) {} }
+                  return "{\"i\":" + idx + ",\"p\":" + p + ",\"d\":" + d + ",\"pl\":" + pl + ",\"r\":" + repeat + ",\"s\":" + shuffle
+                      + ",\"e\":" + err + ",\"m\":\"" + errMsg.replace("\"", "'") + "\",\"l\":" + loading + "}";
+              }
+          }
+          EOF_X
+
+      - name: Write app/src/main/java/com/ipod/classic/Net.java
+        run: |
+          mkdir -p 'app/src/main/java/com/ipod/classic'
+          cat > 'app/src/main/java/com/ipod/classic/Net.java' <<'EOF_X'
+          package com.ipod.classic;
+
+          import java.io.BufferedReader;
+          import java.io.IOException;
+          import java.io.InputStreamReader;
+          import java.net.HttpURLConnection;
+          import java.net.URL;
+          import java.security.cert.X509Certificate;
+          import javax.net.ssl.HttpsURLConnection;
+          import javax.net.ssl.SSLContext;
+          import javax.net.ssl.SSLException;
+          import javax.net.ssl.SSLSocketFactory;
+          import javax.net.ssl.TrustManager;
+          import javax.net.ssl.X509TrustManager;
+
+          /** HTTP helper: follows redirects (also http<->https). Old Android versions reject newer
+           *  certificate chains, so on an SSL failure it retries once without chain validation
+           *  (only public music/podcast data is ever requested - never logins or personal data). */
+          public class Net {
+              static SSLSocketFactory LAX;
+
+              static SSLSocketFactory lax() {
+                  if (LAX == null) {
+                      try {
+                          TrustManager[] t = new TrustManager[]{new X509TrustManager() {
+                              public void checkClientTrusted(X509Certificate[] c, String a) {}
+                              public void checkServerTrusted(X509Certificate[] c, String a) {}
+                              public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+                          }};
+                          SSLContext sc = SSLContext.getInstance("TLS");
+                          sc.init(null, t, null);
+                          LAX = sc.getSocketFactory();
+                      } catch (Exception e) {}
+                  }
+                  return LAX;
+              }
+
+              static HttpURLConnection conn(String u, boolean relaxed) throws IOException {
+                  HttpURLConnection h = (HttpURLConnection) new URL(u).openConnection();
+                  if (relaxed && h instanceof HttpsURLConnection) ((HttpsURLConnection) h).setSSLSocketFactory(lax());
+                  h.setInstanceFollowRedirects(false);
+                  h.setConnectTimeout(15000);
+                  h.setReadTimeout(25000);
+                  h.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) iPodClassic");
+                  return h;
+              }
+
+              static HttpURLConnection open(String u) throws IOException {
+                  boolean relaxed = false;
+                  for (int i = 0; i < 7; i++) {
+                      HttpURLConnection h = conn(u, relaxed);
+                      int c;
+                      try {
+                          c = h.getResponseCode();
+                      } catch (SSLException e) {
+                          if (relaxed) throw e;
+                          relaxed = true;
+                          i--;
+                          continue;
+                      }
+                      if (c >= 300 && c < 400) {
+                          String l = h.getHeaderField("Location");
+                          h.disconnect();
+                          if (l == null) break;
+                          u = new URL(new URL(u), l).toString();
+                          continue;
+                      }
+                      return h;
+                  }
+                  throw new IOException("redirects");
+              }
+
+              static String text(String u) throws IOException {
+                  HttpURLConnection h = open(u);
+                  if (h.getResponseCode() >= 400) throw new IOException("HTTP " + h.getResponseCode());
+                  BufferedReader br = new BufferedReader(new InputStreamReader(h.getInputStream(), "UTF-8"));
+                  StringBuilder sb = new StringBuilder();
+                  char[] buf = new char[8192];
+                  int n;
+                  while ((n = br.read(buf)) > 0 && sb.length() < 1500000) sb.append(buf, 0, n);
+                  br.close();
+                  return sb.toString();
+              }
+          }
+          EOF_X
+
+      - name: Write app/src/main/java/com/ipod/classic/Bridge.java
+        run: |
+          mkdir -p 'app/src/main/java/com/ipod/classic'
+          cat > 'app/src/main/java/com/ipod/classic/Bridge.java' <<'EOF_X'
+          package com.ipod.classic;
+
+          import android.app.Activity;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.content.IntentFilter;
+          import android.database.Cursor;
+          import android.graphics.Bitmap;
+          import android.graphics.BitmapFactory;
+          import android.media.AudioManager;
+          import android.media.MediaMetadataRetriever;
+          import android.media.MediaScannerConnection;
+          import android.net.ConnectivityManager;
+          import android.net.NetworkInfo;
+          import android.net.wifi.WifiManager;
+          import android.os.Environment;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.provider.MediaStore;
+          import android.util.Base64;
+          import android.webkit.JavascriptInterface;
+          import android.webkit.WebView;
+          import java.io.BufferedInputStream;
+          import java.io.ByteArrayOutputStream;
+          import java.io.File;
+          import java.io.FileInputStream;
+          import java.io.FileOutputStream;
+          import java.io.IOException;
+          import java.io.InputStream;
+          import java.io.OutputStream;
+          import java.net.HttpURLConnection;
+          import org.json.JSONArray;
+          import org.json.JSONObject;
+
+          /** JS <-> Java bridge, exposed to the page as window.A */
+          public class Bridge {
+              final Activity a;
+              final WebView w;
+
+              Bridge(Activity a, WebView w) { this.a = a; this.w = w; }
+
+              void js(final String s) {
+                  a.runOnUiThread(new Runnable() { public void run() { w.evaluateJavascript(s, null); } });
+              }
+
+              static String quote(String s) {
+                  return JSONObject.quote(s).replace("\u2028", "\\u2028").replace("\u2029", "\\u2029");
+              }
+
+              static File musicDir() {
+                  File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "iPod");
+                  dir.mkdirs();
+                  return dir;
+              }
+
+              // ---------- local library ----------
+              @JavascriptInterface public String library() {
+                  JSONArray r = new JSONArray();
+                  try {
+                      Cursor c = a.getContentResolver().query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                          new String[]{"_data", "title", "artist", "album", "duration", "date_added"}, "duration>1000", null, "title COLLATE NOCASE");
+                      if (c != null) {
+                          while (c.moveToNext()) {
+                              String p = c.getString(0);
+                              if (p == null) continue;
+                              String l = p.toLowerCase();
+                              if (!(l.endsWith(".mp3") || l.endsWith(".m4a") || l.endsWith(".wav") || l.endsWith(".aac") || l.endsWith(".ogg") || l.endsWith(".flac"))) continue;
+                              if (l.contains("/ringtones/") || l.contains("/notifications/") || l.contains("/alarms/")) continue;
+                              JSONObject o = new JSONObject();
+                              o.put("p", p).put("t", c.getString(1)).put("a", c.getString(2)).put("b", c.getString(3)).put("d", c.getLong(4) / 1000).put("da", c.getLong(5));
+                              r.put(o);
+                          }
+                          c.close();
+                      }
+                  } catch (Exception e) {}
+                  return r.toString();
+              }
+
+              @JavascriptInterface public String art(String p) {
+                  if (p == null || p.startsWith("http") || p.startsWith("lazy:")) return "";
+                  MediaMetadataRetriever m = new MediaMetadataRetriever();
+                  try {
+                      m.setDataSource(p);
+                      byte[] b = m.getEmbeddedPicture();
+                      if (b == null) {                       // downloaded songs keep their cover in a sibling .art file
+                          File af = new File(p.replaceAll("\\.[^./]+$", "") + ".art");
+                          if (!af.exists()) return "";
+                          FileInputStream fi = new FileInputStream(af);
+                          ByteArrayOutputStream bo = new ByteArrayOutputStream();
+                          byte[] tb = new byte[8192]; int tn;
+                          while ((tn = fi.read(tb)) > 0) bo.write(tb, 0, tn);
+                          fi.close();
+                          b = bo.toByteArray();
+                      }
+                      BitmapFactory.Options o = new BitmapFactory.Options();
+                      o.inJustDecodeBounds = true;
+                      BitmapFactory.decodeByteArray(b, 0, b.length, o);
+                      o.inSampleSize = Math.max(1, o.outWidth / 200);
+                      o.inJustDecodeBounds = false;
+                      Bitmap bm = BitmapFactory.decodeByteArray(b, 0, b.length, o);
+                      if (bm == null) return "";
+                      ByteArrayOutputStream s = new ByteArrayOutputStream();
+                      bm.compress(Bitmap.CompressFormat.JPEG, 70, s);
+                      bm.recycle();
+                      return "data:image/jpeg;base64," + Base64.encodeToString(s.toByteArray(), Base64.NO_WRAP);
+                  } catch (Exception e) {
+                      return "";
+                  } finally {
+                      try { m.release(); } catch (Exception e) {}
+                  }
+              }
+
+              @JavascriptInterface public boolean del(String path) {       // only files this app downloaded
+                  if (path == null || !path.contains("/Music/iPod/")) return false;
+                  boolean ok = new File(path).delete();
+                  if (ok) MediaScannerConnection.scanFile(a, new String[]{path}, null, null);
+                  return ok;
+              }
+
+              // ---------- playback ----------
+              @JavascriptInterface public void playQueue(String json, int start) {
+                  try { Player.setQueue(a, new JSONArray(json), start); } catch (Exception e) {}
+              }
+              @JavascriptInterface public void toggle() { Player.toggle(); }
+              @JavascriptInterface public void next() { Player.next(); }
+              @JavascriptInterface public void prev() { Player.prev(); }
+              @JavascriptInterface public void seek(int ms) { Player.seek(ms); }
+              @JavascriptInterface public String state() { return Player.state(); }
+              @JavascriptInterface public void setRepeat(int r) { Player.repeat = r; }
+              @JavascriptInterface public void setShuffle(boolean b) { Player.shuffle = b; }
+
+              @JavascriptInterface public void vol(int d) {
+                  ((AudioManager) a.getSystemService(Context.AUDIO_SERVICE)).adjustStreamVolume(AudioManager.STREAM_MUSIC,
+                      d > 0 ? AudioManager.ADJUST_RAISE : AudioManager.ADJUST_LOWER, 0);
+              }
+              @JavascriptInterface public String volume() {
+                  AudioManager m = (AudioManager) a.getSystemService(Context.AUDIO_SERVICE);
+                  return m.getStreamVolume(AudioManager.STREAM_MUSIC) + "," + m.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+              }
+
+              // ---------- app / status ----------
+              @JavascriptInterface public void hide() {
+                  a.runOnUiThread(new Runnable() { public void run() { a.moveTaskToBack(true); } });
+              }
+              @JavascriptInterface public void exit() {
+                  Player.release();
+                  stopServer();
+                  a.runOnUiThread(new Runnable() { public void run() { a.finish(); } });
+              }
+              @JavascriptInterface public String status() {
+                  try {
+                      Intent i = a.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+                      int lv = i.getIntExtra("level", 0) * 100 / Math.max(1, i.getIntExtra("scale", 100));
+                      boolean ch = i.getIntExtra("plugged", 0) != 0;
+                      WifiManager wm = (WifiManager) a.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                      NetworkInfo n = ((ConnectivityManager) a.getSystemService(Context.CONNECTIVITY_SERVICE)).getActiveNetworkInfo();
+                      return "{\"b\":" + lv + ",\"c\":" + ch + ",\"w\":" + wm.isWifiEnabled() + ",\"n\":" + (n != null && n.isConnected()) + "}";
+                  } catch (Exception e) {
+                      return "{\"b\":0,\"c\":false,\"w\":false,\"n\":false}";
+                  }
+              }
+
+              // ---------- network ----------
+              @JavascriptInterface public void get(final String url, final int id) {
+                  new Thread(new Runnable() {
+                      public void run() {
+                          try {
+                              js("onHttp(" + id + ",true," + quote(Net.text(url)) + ")");
+                          } catch (Exception e) {
+                              js("onHttp(" + id + ",false,'')");
+                          }
+                      }
+                  }).start();
+              }
+
+              @JavascriptInterface public void download(final String url, final String name, final int id, final String img) {
+                  new Thread(new Runnable() {
+                      public void run() {
+                          try {
+                              File dir = musicDir();
+                              String base = name.replaceAll("[^\\p{L}\\p{N}\\-_ ]", "_");
+                              if (base.length() > 80) base = base.substring(0, 80);
+                              File f = new File(dir, base + ".mp3");
+                              HttpURLConnection h = Net.open(url);
+                              if (h.getResponseCode() >= 400) throw new IOException("HTTP");
+                              int len = h.getContentLength();
+                              InputStream in = h.getInputStream();
+                              FileOutputStream o = new FileOutputStream(f);
+                              byte[] b = new byte[16384]; int n, last = -1; long t = 0;
+                              while ((n = in.read(b)) > 0) {
+                                  o.write(b, 0, n); t += n;
+                                  int p = len > 0 ? (int) (t * 100 / len) : 0;
+                                  if (p != last && p % 10 == 0) { last = p; js("onDl(" + id + "," + p + ",'')"); }
+                              }
+                              o.close(); in.close();
+                              if (img != null && img.startsWith("http")) {
+                                  try {
+                                      HttpURLConnection g = Net.open(img);
+                                      InputStream gi = g.getInputStream();
+                                      FileOutputStream go = new FileOutputStream(new File(dir, base + ".art"));
+                                      byte[] gb = new byte[8192]; int gn;
+                                      while ((gn = gi.read(gb)) > 0) go.write(gb, 0, gn);
+                                      go.close(); gi.close();
+                                  } catch (Exception e) {}
+                              }
+                              MediaScannerConnection.scanFile(a, new String[]{f.getPath()}, null, null);
+                              js("onDl(" + id + ",101," + quote(f.getPath()) + ")");
+                          } catch (Exception e) {
+                              js("onDl(" + id + ",-1,'')");
+                          }
+                      }
+                  }).start();
+              }
+
+              // ---------- sleep timer ----------
+              static final Handler SH = new Handler(Looper.getMainLooper());
+              static final Runnable SR = new Runnable() { public void run() { Player.pause(); } };
+              @JavascriptInterface public void sleep(int min) {
+                  SH.removeCallbacks(SR);
+                  if (min > 0) SH.postDelayed(SR, min * 60000L);
+              }
+
+              // ---------- Wi-Fi upload server (runs only while the Upload screen is open) ----------
+              static java.net.ServerSocket srv;
+
+              @JavascriptInterface public synchronized String startServer() {
+                  try {
+                      int ip = ((WifiManager) a.getApplicationContext().getSystemService(Context.WIFI_SERVICE)).getConnectionInfo().getIpAddress();
+                      if (ip == 0) return "";
+                      stopServer();
+                      final java.net.ServerSocket s = new java.net.ServerSocket(8080);
+                      srv = s;
+                      new Thread(new Runnable() {
+                          public void run() {
+                              while (!s.isClosed()) {
+                                  try {
+                                      final java.net.Socket c = s.accept();
+                                      new Thread(new Runnable() { public void run() { serve(c); } }).start();
+                                  } catch (Exception e) {}
+                              }
+                          }
+                      }).start();
+                      return "http://" + (ip & 255) + "." + ((ip >> 8) & 255) + "." + ((ip >> 16) & 255) + "." + ((ip >> 24) & 255) + ":8080";
+                  } catch (Exception e) {
+                      return "";
+                  }
+              }
+
+              @JavascriptInterface public synchronized void stopServer() {
+                  try { if (srv != null) srv.close(); } catch (Exception e) {}
+                  srv = null;
+              }
+
+              static String line(InputStream in) throws IOException {
+                  StringBuilder b = new StringBuilder();
+                  int c;
+                  while ((c = in.read()) != -1 && c != '\n') if (c != '\r') b.append((char) c);
+                  return b.toString();
+              }
+
+              void serve(java.net.Socket s) {
+                  try {
+                      s.setSoTimeout(30000);
+                      InputStream in = new BufferedInputStream(s.getInputStream());
+                      OutputStream out = s.getOutputStream();
+                      String rq = line(in), h;
+                      long cl = 0;
+                      while ((h = line(in)).length() > 0) if (h.toLowerCase().startsWith("content-length:")) cl = Long.parseLong(h.substring(15).trim());
+                      String body;
+                      if (rq.startsWith("POST /up?n=")) {
+                          String n = java.net.URLDecoder.decode(rq.substring(11, rq.indexOf(' ', 11)), "UTF-8").replaceAll("[^\\p{L}\\p{N}\\-_. ()]", "_");
+                          if (!n.toLowerCase().matches(".*\\.(mp3|m4a|aac|wav|ogg|flac)$")) {
+                              body = "Not an audio file";
+                          } else {
+                              File f = new File(musicDir(), n);
+                              FileOutputStream o = new FileOutputStream(f);
+                              byte[] b = new byte[16384]; long t = 0; int r;
+                              while (t < cl && (r = in.read(b, 0, (int) Math.min(b.length, cl - t))) > 0) { o.write(b, 0, r); t += r; }
+                              o.close();
+                              MediaScannerConnection.scanFile(a, new String[]{f.getPath()}, null, null);
+                              body = "OK";
+                          }
+                      } else {
+                          body = "<meta charset='utf-8'><meta name=viewport content='width=device-width'><body style='font-family:sans-serif;text-align:center;padding:30px'>"
+                              + "<h2>iPod - \u0631\u0641\u0639 \u0627\u0644\u0623\u063a\u0627\u0646\u064a</h2><input type=file id=f multiple accept='audio/*'><p><button onclick='up()'>Upload</button></p><pre id=s></pre>"
+                              + "<script>async function up(){var a=document.getElementById('f').files,s=document.getElementById('s');for(var i=0;i<a.length;i++){s.textContent+=a[i].name+' ... ';"
+                              + "try{var r=await fetch('/up?n='+encodeURIComponent(a[i].name),{method:'POST',body:a[i]});s.textContent+=(await r.text())+'\\n'}catch(e){s.textContent+='ERR\\n'}}}</script>";
+                      }
+                      byte[] bb = body.getBytes("UTF-8");
+                      out.write(("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\nContent-Length: " + bb.length + "\r\n\r\n").getBytes());
+                      out.write(bb);
+                      out.flush();
+                      s.close();
+                  } catch (Exception e) {
+                      try { s.close(); } catch (Exception x) {}
+                  }
+              }
+          }
+          EOF_X
+
+      - name: Set up Gradle 8.5
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.5'
+
+      - name: Build debug APK
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Check APK
+        run: ls -lh app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
