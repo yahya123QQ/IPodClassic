@@ -19,8 +19,19 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Install Android Command Line Tools & SDK
+        run: |
+          set -e
+          ANDROID_HOME=$HOME/android-sdk
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline-tools.zip
+          unzip -q cmdline-tools.zip -d $ANDROID_HOME/cmdline-tools
+          mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
 
       - name: Create Android project with iPod Classic UI & Playback Engine
         run: |
@@ -464,7 +475,7 @@ jobs:
               .shuffle-bar {
                 display: flex;
                 justify-content: flex-end;
-                margin-top: 6px;
+                margin-top: 8px;
               }
               .shuffle-btn {
                 display: inline-flex;
@@ -632,13 +643,14 @@ jobs:
                 let score = track.popularity || 0;
 
                 if (q) {
-                  if (title === q) score += 500;
-                  else if (title.startsWith(q)) score += 250;
-                  else if (title.includes(q)) score += 120;
+                  if (title === q) score += 600;
+                  else if (title.startsWith(q)) score += 300;
+                  else if (title.includes(q)) score += 140;
 
-                  if (artist.includes(q)) score += 80;
-                  if (/\b(remix|lofi|slowed|reverb|cover|nightcore|instrumental)\b/i.test(title) && !/\b(remix|lofi|slowed|reverb|cover|nightcore|instrumental)\b/i.test(q)) {
-                    score -= 140;
+                  if (artist.includes(q)) score += 90;
+                  if (/\b(remix|lofi|slowed|reverb|cover|nightcore|instrumental)\b/i.test(title) &&
+                      !/\b(remix|lofi|slowed|reverb|cover|nightcore|instrumental)\b/i.test(q)) {
+                    score -= 180;
                   }
                 }
                 return score;
